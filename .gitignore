@@ -1,0 +1,9 @@
+.claude/
+*.strings.txt
+__pycache__/
+*.pyc
+
+# Vendor-copyrighted files: kept locally for reference, not published
+iNukeRemoteConnect_V1.4/*.exe
+iNukeUsbUpdate_V1.3/*.exe
+user_manual.pdf
