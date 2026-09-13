@@ -104,6 +104,25 @@ DSP state, but only Recall touches the amp's own onboard slots.
 5. Frequency, dB, and other numeric fields are plain float32 — don't try to
    parse the `.arp` file's `4k00`-style shorthand as anything other than a
    save-file text convenience; it's never on the wire.
+6. **Pace SET messages — an unpaced burst silently drops writes.** Writing
+   all 8 PEQ bands on a channel back-to-back with no delay between the USB
+   `SET_REPORT` transfers resulted in only some of the 8 actually landing
+   (confirmed via independent readback: the last band(s) sent kept their
+   old value). Reads were unaffected throughout, and the *symptom* even
+   partially persisted across separate/fresh HID connections afterward —
+   readback for that address stayed stuck until enough time had passed
+   without further writes, at which point single or paced writes worked
+   normally again. Best working theory: some internal write-coalescing or
+   non-volatile-write cooldown for that parameter block, not a transport
+   issue. Both `webapp/` and `cli/` now serialize and pace every outgoing
+   message (GET or SET) at least ~75ms apart as a conservative mitigation —
+   see `MIN_SEND_INTERVAL_MS`/`MIN_SEND_INTERVAL_S` in their `protocol.js`/
+   `protocol.py`. The true safe minimum interval (and whether it's uniform
+   across all address types or specific to PEQ) was **not** isolated
+   cleanly — later bursts in the same session ran against a device already
+   in the degraded state from the first one, so that data is confounded.
+   Treat 75ms as a safety margin, not a confirmed figure, if you're
+   debugging this further.
 
 ## Hardware / transport
 

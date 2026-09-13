@@ -1,6 +1,7 @@
+import time
 import unittest
 
-from inuke_cli.protocol import DeviceTimeoutError, INukeClient, osc_decode, osc_encode
+from inuke_cli.protocol import MIN_SEND_INTERVAL_S, DeviceTimeoutError, INukeClient, osc_decode, osc_encode
 from .fake_transport import FakeTransport
 
 
@@ -88,8 +89,8 @@ class INukeClientTests(unittest.TestCase):
 
     def test_full_sync_reports_progress_and_tolerates_missing_replies(self):
         transport = FakeTransport({"/info": ("ssi", ["MyAmp", "(V1.3)", 5]), "/ampmode": ("s", ["STEREO"])})
-        # keep unanswered GETs fast for this test
-        client = INukeClient(transport=transport, default_timeout_s=0.02)
+        # keep unanswered GETs (and inter-send pacing) fast for this test
+        client = INukeClient(transport=transport, default_timeout_s=0.02, min_send_interval_s=0)
         progress = []
         results = client.full_sync(on_progress=lambda i, total, key: progress.append((i, total, key)))
 
@@ -97,6 +98,28 @@ class INukeClientTests(unittest.TestCase):
         self.assertEqual(results["ampmode"], "STEREO")
         self.assertIn("error", results["gain"])  # no reply configured -> timed out, captured not raised
         self.assertEqual(progress[-1][0], progress[-1][1])  # last progress call reports done == total
+
+    def test_burst_of_sets_is_paced_at_least_min_send_interval_apart(self):
+        # Regression: unpaced bursts (e.g. writing all 8 PEQ bands back to
+        # back) silently dropped some writes on real hardware.
+        transport = FakeTransport({})
+        client = INukeClient(transport=transport)
+        sent_at = []
+        original_write = transport.write
+
+        def timed_write(data):
+            sent_at.append(time.time())
+            return original_write(data)
+
+        transport.write = timed_write
+
+        for band in range(1, 9):
+            client.set_peq(1, band, "PEQ", 1000.0, 0.0, 1.0)
+
+        self.assertEqual(len(sent_at), 8)
+        for i in range(1, len(sent_at)):
+            gap = sent_at[i] - sent_at[i - 1]
+            self.assertGreaterEqual(gap, MIN_SEND_INTERVAL_S - 0.005, f"gap between send {i - 1} and {i} was {gap}s")
 
 
 if __name__ == "__main__":

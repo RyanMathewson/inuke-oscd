@@ -1,12 +1,13 @@
 import { el } from '../utils.js';
-import { AMP_MODES, AMP_MODE_LABELS, AMP_MODE_ENUM, AMP_MODE_BY_ENUM, PRESET_SLOT_COUNT } from '../constants.js';
+import { AMP_MODES, AMP_MODE_LABELS, AMP_MODE_ENUM, AMP_MODE_BY_ENUM, PRESET_SLOT_COUNT, BOUNDS } from '../constants.js';
+import { confirmDialog } from './dialog.js';
 
 export function mountSetup(container, { store, protocol, log }) {
   const infoBody = el('div', { class: 'note' }, 'Not connected.');
   const progressWrap = el('div', { class: 'progress', hidden: true }, [el('div', { style: 'width:0%' })]);
   const progressLabel = el('div', { class: 'note', hidden: true });
 
-  const nameInput = el('input', { type: 'text', placeholder: 'Amp name' });
+  const nameInput = el('input', { type: 'text', placeholder: 'Amp name', maxlength: BOUNDS.ampNameLength });
   const modeSelect = el(
     'select',
     {
@@ -26,7 +27,7 @@ export function mountSetup(container, { store, protocol, log }) {
   const gainValue = el('div', { class: 'note' }, '—');
   const lockValue = el('div', { class: 'note' }, 'unknown until /online is sent');
 
-  const presetNameInput = el('input', { type: 'text', placeholder: 'Preset name' });
+  const presetNameInput = el('input', { type: 'text', placeholder: 'Preset name', maxlength: BOUNDS.presetNameLength });
   const presetTbody = el('tbody');
 
   async function refreshPreset(slot) {
@@ -49,7 +50,7 @@ export function mountSetup(container, { store, protocol, log }) {
         const slot = s.selectedPreset;
         const modeEnum = AMP_MODE_ENUM[s.ampMode] ?? 0;
         const name = presetNameInput.value || `Slot ${slot}`;
-        if (!confirm(`Store the amp's current full state to preset slot ${slot} as "${name}"? This overwrites whatever is already there.`)) return;
+        if (!(await confirmDialog(`Store the amp's current full state to preset slot ${slot} as "${name}"? This overwrites whatever is already there.`))) return;
         try {
           await protocol.savePreset(slot, modeEnum, name);
           log(`Stored slot ${slot} as "${name}"`);
@@ -70,7 +71,7 @@ export function mountSetup(container, { store, protocol, log }) {
         const s = store.get();
         const slot = s.selectedPreset;
         const row = s.presets.find((p) => p.slot === slot);
-        if (!confirm(`Recall preset slot ${slot} ("${row?.name ?? ''}")? This replaces every live DSP parameter on the amp right now.`)) return;
+        if (!(await confirmDialog(`Recall preset slot ${slot} ("${row?.name ?? ''}")? This replaces every live DSP parameter on the amp right now.`))) return;
         try {
           await protocol.loadPreset(slot, row?.name ?? '');
           log(`Recalled slot ${slot}`);

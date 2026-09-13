@@ -7,6 +7,21 @@ import { CHANNELS, PEQ_BANDS, DEQ_BANDS, PRESET_SLOT_COUNT } from './constants.j
 
 const DEFAULT_TIMEOUT_MS = 2000;
 
+// Minimum gap enforced between any two outgoing messages (GET or SET). A
+// burst of unpaced SETs (e.g. writing all 8 PEQ bands back-to-back) was
+// observed to silently drop some writes on real hardware -- the device
+// accepted the USB transfers but didn't apply every one. This wasn't
+// something the existing GET-only sequential flows (which are naturally
+// paced by round-trip latency) ever hit. The real safe minimum was not
+// isolated precisely (later bursts happened against a device already in a
+// degraded state from the first one), so this is a conservative guess, not
+// a confirmed device spec -- see docs/PROTOCOL_NOTES.md.
+export const MIN_SEND_INTERVAL_MS = 75;
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export class DeviceTimeoutError extends Error {}
 
 export class INukeProtocol extends EventTarget {
@@ -14,6 +29,8 @@ export class INukeProtocol extends EventTarget {
     super();
     this.transport = new HidTransport();
     this._replyQueue = Promise.resolve();
+    this._sendQueue = Promise.resolve();
+    this._lastSendAt = 0;
     this._heartbeat = null;
     this.transport.addEventListener('report', (e) => this._handleReport(e.detail));
     this.transport.addEventListener('close', () => {
@@ -53,16 +70,34 @@ export class INukeProtocol extends EventTarget {
     this.dispatchEvent(new CustomEvent('message', { detail: decoded }));
   }
 
-  /** Fire-and-forget SET (or a bare trigger like /online). No reply is awaited. */
-  async send(address, typetags = '', args = []) {
+  /**
+   * Fire-and-forget SET (or a bare trigger like /online). No reply is
+   * awaited, but every send -- from here or from get() below -- is
+   * serialized through one queue and paced at least MIN_SEND_INTERVAL_MS
+   * apart, so a burst of writes (e.g. all 8 PEQ bands) can't outrun what
+   * the device can reliably apply.
+   */
+  send(address, typetags = '', args = []) {
     const msg = oscEncode(address, typetags, args);
     if (msg.length > REPORT_LEN - 1) {
-      throw new Error(`message too long for one report (${msg.length} bytes): ${address}`);
+      return Promise.reject(new Error(`message too long for one report (${msg.length} bytes): ${address}`));
     }
     const report = new Uint8Array(1 + msg.length);
     report[0] = msg.length;
     report.set(msg, 1);
-    await this.transport.sendReport(report);
+
+    const run = async () => {
+      const waitMs = MIN_SEND_INTERVAL_MS - (Date.now() - this._lastSendAt);
+      if (waitMs > 0) await delay(waitMs);
+      await this.transport.sendReport(report);
+      this._lastSendAt = Date.now();
+    };
+    const result = this._sendQueue.then(run, run);
+    this._sendQueue = result.then(
+      () => {},
+      () => {},
+    );
+    return result;
   }
 
   /**

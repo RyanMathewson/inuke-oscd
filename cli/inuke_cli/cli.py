@@ -71,6 +71,31 @@ def _xover_type(s: str) -> str:
     return s
 
 
+def _bounded_float(bound_key: str):
+    """Conservative, undocumented-device-limit guesses -- see constants.BOUNDS."""
+    lo, hi = C.BOUNDS[bound_key]
+
+    def validator(s: str) -> float:
+        try:
+            v = float(s)
+        except ValueError:
+            raise argparse.ArgumentTypeError(f"{s!r} is not a number")
+        if not (lo <= v <= hi):
+            raise argparse.ArgumentTypeError(f"{bound_key.replace('_', ' ')} must be between {lo} and {hi} (got {v})")
+        return v
+
+    return validator
+
+
+def _max_len_str(maxlen: int):
+    def validator(s: str) -> str:
+        if len(s) > maxlen:
+            raise argparse.ArgumentTypeError(f"{s!r} is too long ({len(s)} chars, max {maxlen})")
+        return s
+
+    return validator
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="inuke", description="Control a Behringer iNuke DSP amp directly over USB.")
     p.add_argument("--json", action="store_true", help="output machine-readable JSON instead of plain text")
@@ -86,29 +111,29 @@ def build_parser() -> argparse.ArgumentParser:
     mode_p.add_argument("value", nargs="?", type=_amp_mode_type, help=f"one of {', '.join(C.AMP_MODES)}; omit to just read it")
 
     name_p = sub.add_parser("name", help="get or set the amp's display name")
-    name_p.add_argument("value", nargs="?", help="new name; omit to just read it")
+    name_p.add_argument("value", nargs="?", type=_max_len_str(C.AMP_NAME_MAX_LEN), help="new name; omit to just read it")
 
     peq_p = sub.add_parser("peq", help="get or set a parametric EQ band")
     peq_p.add_argument("channel", type=int, choices=C.CHANNELS)
     peq_p.add_argument("band", type=int, choices=list(C.PEQ_BANDS))
     peq_p.add_argument("type", nargs="?", type=_peq_type)
-    peq_p.add_argument("freq", nargs="?", type=float)
-    peq_p.add_argument("gain", nargs="?", type=float)
-    peq_p.add_argument("q", nargs="?", type=float)
+    peq_p.add_argument("freq", nargs="?", type=_bounded_float("freq_hz"))
+    peq_p.add_argument("gain", nargs="?", type=_bounded_float("gain_db"))
+    peq_p.add_argument("q", nargs="?", type=_bounded_float("q"))
 
     xover_p = sub.add_parser("xover", help="crossover: high-pass, low-pass, gain")
     xover_sub = xover_p.add_subparsers(dest="xover_command", required=True)
     hp_p = xover_sub.add_parser("hp", help="get or set high-pass filter")
     hp_p.add_argument("channel", type=int, choices=C.CHANNELS)
     hp_p.add_argument("type", nargs="?", type=_xover_type)
-    hp_p.add_argument("freq", nargs="?", type=float)
+    hp_p.add_argument("freq", nargs="?", type=_bounded_float("freq_hz"))
     lp_p = xover_sub.add_parser("lp", help="get or set low-pass filter")
     lp_p.add_argument("channel", type=int, choices=C.CHANNELS)
     lp_p.add_argument("type", nargs="?", type=_xover_type)
-    lp_p.add_argument("freq", nargs="?", type=float)
+    lp_p.add_argument("freq", nargs="?", type=_bounded_float("freq_hz"))
     xg_p = xover_sub.add_parser("gain", help="get or set crossover gain (dB)")
     xg_p.add_argument("channel", type=int, choices=C.CHANNELS)
-    xg_p.add_argument("db", nargs="?", type=float)
+    xg_p.add_argument("db", nargs="?", type=_bounded_float("gain_db"))
 
     deq_p = sub.add_parser("deq", help="dynamic EQ: sidechain filter, compressor, timing")
     deq_sub = deq_p.add_subparsers(dest="deq_command", required=True)
@@ -116,37 +141,37 @@ def build_parser() -> argparse.ArgumentParser:
     filt_p.add_argument("channel", type=int, choices=C.CHANNELS)
     filt_p.add_argument("band", type=int, choices=list(C.DEQ_BANDS))
     filt_p.add_argument("type", nargs="?", type=_deq_type)
-    filt_p.add_argument("freq", nargs="?", type=float)
-    filt_p.add_argument("q", nargs="?", type=float)
+    filt_p.add_argument("freq", nargs="?", type=_bounded_float("freq_hz"))
+    filt_p.add_argument("q", nargs="?", type=_bounded_float("q"))
     comp_p = deq_sub.add_parser("comp", help="get or set the compressor")
     comp_p.add_argument("channel", type=int, choices=C.CHANNELS)
     comp_p.add_argument("band", type=int, choices=list(C.DEQ_BANDS))
-    comp_p.add_argument("gain", nargs="?", type=float)
-    comp_p.add_argument("threshold", nargs="?", type=float)
-    comp_p.add_argument("ratio", nargs="?", type=float)
+    comp_p.add_argument("gain", nargs="?", type=_bounded_float("gain_db"))
+    comp_p.add_argument("threshold", nargs="?", type=_bounded_float("threshold_db"))
+    comp_p.add_argument("ratio", nargs="?", type=_bounded_float("ratio"))
     time_p = deq_sub.add_parser("time", help="get or set attack/release timing")
     time_p.add_argument("channel", type=int, choices=C.CHANNELS)
     time_p.add_argument("band", type=int, choices=list(C.DEQ_BANDS))
-    time_p.add_argument("attack", nargs="?", type=float)
-    time_p.add_argument("release", nargs="?", type=float)
+    time_p.add_argument("attack", nargs="?", type=_bounded_float("time_ms"))
+    time_p.add_argument("release", nargs="?", type=_bounded_float("time_ms"))
 
     delay_p = sub.add_parser("delay", help="get or set delay time and phase")
     delay_p.add_argument("channel", type=int, choices=C.CHANNELS)
-    delay_p.add_argument("ms", nargs="?", type=float)
+    delay_p.add_argument("ms", nargs="?", type=_bounded_float("delay_ms"))
     delay_p.add_argument("phase", nargs="?", type=int, choices=[0, 180])
 
     lim_p = sub.add_parser("limiter", help="get or set the limiter")
     lim_p.add_argument("channel", type=int, choices=C.CHANNELS)
-    lim_p.add_argument("threshold_vp", nargs="?", type=float, help="threshold in peak volts, not dBFS")
-    lim_p.add_argument("release_ms", nargs="?", type=float)
-    lim_p.add_argument("hold_ms", nargs="?", type=float)
+    lim_p.add_argument("threshold_vp", nargs="?", type=_bounded_float("limiter_threshold_vp"), help="threshold in peak volts, not dBFS")
+    lim_p.add_argument("release_ms", nargs="?", type=_bounded_float("time_ms"))
+    lim_p.add_argument("hold_ms", nargs="?", type=_bounded_float("time_ms"))
 
     preset_p = sub.add_parser("preset", help="the amp's 20 onboard preset slots")
     preset_sub = preset_p.add_subparsers(dest="preset_command", required=True)
     preset_sub.add_parser("list", help="list all 20 slots")
     store_p = preset_sub.add_parser("store", help="snapshot the amp's current full state into a slot")
     store_p.add_argument("slot", type=int, choices=range(1, C.PRESET_SLOT_COUNT + 1))
-    store_p.add_argument("name")
+    store_p.add_argument("name", type=_max_len_str(C.PRESET_NAME_MAX_LEN))
     store_p.add_argument("--mode", type=_amp_mode_type, help="ampmode to record with the preset (default: current mode)")
     store_p.add_argument("-y", "--yes", action="store_true", help="don't prompt for confirmation")
     recall_p = preset_sub.add_parser("recall", help="replace the amp's entire live state with a stored slot")

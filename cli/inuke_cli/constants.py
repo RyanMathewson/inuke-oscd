@@ -30,3 +30,22 @@ PRESET_SLOT_COUNT = 20
 CHANNELS = (1, 2)
 PEQ_BANDS = range(1, 9)
 DEQ_BANDS = (1, 2)
+
+# Conservative input-validation bounds. None of these are documented device
+# limits -- PROTOCOL_NOTES.md never pinned down the amp's actual valid
+# ranges for these fields -- so these are deliberately generous guesses
+# meant only to block nonsensical input (zero/negative frequencies break
+# the log-scale chart math in the web app, for instance), not to
+# second-guess a real device ceiling we don't know.
+BOUNDS = {
+    "freq_hz": (1, 20000),
+    "gain_db": (-24, 24),
+    "threshold_db": (-60, 0),
+    "ratio": (1, 20),
+    "q": (0.01, 20),
+    "delay_ms": (0, 1000),
+    "time_ms": (0, 2000),
+    "limiter_threshold_vp": (0, 200),
+}
+AMP_NAME_MAX_LEN = 28
+PRESET_NAME_MAX_LEN = 28

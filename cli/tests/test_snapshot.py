@@ -25,7 +25,7 @@ def _full_reply_map():
 class SnapshotTests(unittest.TestCase):
     def test_capture_produces_a_restorable_shape(self):
         transport = FakeTransport(_full_reply_map())
-        client = INukeClient(transport=transport)
+        client = INukeClient(transport=transport, min_send_interval_s=0)
         data = snapshot.capture(client)
 
         self.assertEqual(data["format"], "inuke-cli-snapshot")
@@ -36,11 +36,11 @@ class SnapshotTests(unittest.TestCase):
 
     def test_restore_sends_a_set_for_every_captured_field(self):
         transport = FakeTransport(_full_reply_map())
-        client = INukeClient(transport=transport)
+        client = INukeClient(transport=transport, min_send_interval_s=0)
         data = snapshot.capture(client)
 
         transport2 = FakeTransport({})
-        client2 = INukeClient(transport=transport2)
+        client2 = INukeClient(transport=transport2, min_send_interval_s=0)
         progress = []
         snapshot.restore(client2, data, on_progress=lambda i, total, key: progress.append((i, total, key)))
 

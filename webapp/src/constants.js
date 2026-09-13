@@ -30,3 +30,22 @@ export const PRESET_SLOT_COUNT = 20;
 export const CHANNELS = [1, 2];
 export const PEQ_BANDS = [1, 2, 3, 4, 5, 6, 7, 8];
 export const DEQ_BANDS = [1, 2];
+
+// Conservative input-validation bounds. None of these are documented device
+// limits -- PROTOCOL_NOTES.md never pinned down the amp's actual valid
+// ranges for these fields -- so these are deliberately generous guesses
+// meant only to block nonsensical input (zero/negative frequencies break
+// the log-scale chart math with NaN, for instance), not to second-guess a
+// real device ceiling we don't know.
+export const BOUNDS = {
+  freqHz: { min: 1, max: 20000 },
+  gainDb: { min: -24, max: 24 },
+  thresholdDb: { min: -60, max: 0 },
+  ratio: { min: 1, max: 20 },
+  q: { min: 0.01, max: 20 },
+  delayMs: { min: 0, max: 1000 },
+  timeMs: { min: 0, max: 2000 },
+  limiterThresholdVp: { min: 0, max: 200 },
+  ampNameLength: 28,
+  presetNameLength: 28,
+};

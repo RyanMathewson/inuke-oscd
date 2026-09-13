@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { INukeProtocol, DeviceTimeoutError } from '../src/protocol.js';
+import { INukeProtocol, DeviceTimeoutError, MIN_SEND_INTERVAL_MS } from '../src/protocol.js';
 import { oscEncode, oscDecode } from '../src/osc.js';
 
 // These tests exercise INukeProtocol's request/reply matching and
@@ -98,4 +98,23 @@ test('setPeq() sends sfff without waiting for a reply (fire-and-forget)', async 
   await protocol.setPeq(2, 1, 'PEQ', 1000.0, 2.0, 1.0);
   assert.equal(sent.length, 1);
   assert.deepEqual(sent[0], { addr: '/channel/2/peq/1', typetags: 'sfff', args: ['PEQ', 1000.0, 2.0, 1.0] });
+});
+
+test('a burst of SETs is paced at least MIN_SEND_INTERVAL_MS apart (regression: unpaced bursts silently dropped writes on real hardware)', async () => {
+  const protocol = new INukeProtocol();
+  const sentAt = [];
+  protocol.transport.sendReport = async (reportBytes) => {
+    sentAt.push(Date.now());
+  };
+  const writes = [];
+  for (let band = 1; band <= 8; band++) {
+    writes.push(protocol.setPeq(1, band, 'PEQ', 1000, 0, 1));
+  }
+  await Promise.all(writes);
+
+  assert.equal(sentAt.length, 8);
+  for (let i = 1; i < sentAt.length; i++) {
+    const gap = sentAt[i] - sentAt[i - 1];
+    assert.ok(gap >= MIN_SEND_INTERVAL_MS - 5, `gap between send ${i - 1} and ${i} was ${gap}ms, expected >= ~${MIN_SEND_INTERVAL_MS}ms`);
+  }
 });

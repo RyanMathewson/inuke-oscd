@@ -1,5 +1,5 @@
-import { el } from '../utils.js';
-import { CHANNELS, XOVER_FAMILIES, XOVER_FAMILY_LABELS, XOVER_SLOPES } from '../constants.js';
+import { el, clampNum } from '../utils.js';
+import { CHANNELS, XOVER_FAMILIES, XOVER_FAMILY_LABELS, XOVER_SLOPES, BOUNDS } from '../constants.js';
 import { channelPatch } from '../state.js';
 import { createEqChart } from './eq-chart.js';
 import { xoverCurveDb } from '../curve-math.js';
@@ -21,14 +21,15 @@ function filterControl(label, ch, kind, { store, protocol, log }) {
     {},
     XOVER_SLOPES.map((s) => el('option', { value: String(s) }, `${s} dB/oct`)),
   );
-  const freqInput = el('input', { type: 'number', step: '1', min: '0' });
+  const freqInput = el('input', { type: 'number', step: '1', min: BOUNDS.freqHz.min, max: BOUNDS.freqHz.max });
 
   const setter = kind === 'hp' ? protocol.setXoverHp.bind(protocol) : protocol.setXoverLp.bind(protocol);
 
   async function commit() {
     const family = familySelect.value;
     const type = family === 'OFF' ? 'OFF' : `${family}${slopeSelect.value}`;
-    const freq = parseFloat(freqInput.value) || 0;
+    const freq = clampNum(freqInput.value, BOUNDS.freqHz, kind === 'hp' ? 80 : 100);
+    freqInput.value = freq;
     slopeSelect.disabled = family === 'OFF';
     try {
       await setter(ch, type, freq);
@@ -62,9 +63,10 @@ function filterControl(label, ch, kind, { store, protocol, log }) {
 function channelCard(ch, ctx) {
   const hp = filterControl('High Pass', ch, 'hp', ctx);
   const lp = filterControl('Low Pass', ch, 'lp', ctx);
-  const gainInput = el('input', { type: 'number', step: '0.1' });
+  const gainInput = el('input', { type: 'number', step: '0.1', min: BOUNDS.gainDb.min, max: BOUNDS.gainDb.max });
   gainInput.addEventListener('change', async () => {
-    const gainDb = parseFloat(gainInput.value) || 0;
+    const gainDb = clampNum(gainInput.value, BOUNDS.gainDb, 0);
+    gainInput.value = gainDb;
     try {
       await ctx.protocol.setXoverGain(ch, gainDb);
       ctx.store.set((s) => channelPatch(s, ch, (c) => ({ ...c, xover: { ...c.xover, gain: gainDb } })));

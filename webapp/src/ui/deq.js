@@ -1,23 +1,25 @@
-import { el } from '../utils.js';
-import { CHANNELS, DEQ_BANDS, DEQ_FILT_TYPES } from '../constants.js';
+import { el, clampNum } from '../utils.js';
+import { CHANNELS, DEQ_BANDS, DEQ_FILT_TYPES, BOUNDS } from '../constants.js';
 import { channelPatch } from '../state.js';
 import { createEqChart } from './eq-chart.js';
 
 function deqBand(ch, band, { store, protocol, log }) {
   const enableToggle = el('input', { type: 'checkbox', class: 'toggle' });
   const filtType = el('select', {}, DEQ_FILT_TYPES.map((t) => el('option', { value: t }, t)));
-  const filtFreq = el('input', { type: 'number', step: '1', min: '1' });
-  const filtQ = el('input', { type: 'number', step: '0.01', min: '0.01' });
-  const compGain = el('input', { type: 'number', step: '0.1' });
-  const compThresh = el('input', { type: 'number', step: '0.1' });
-  const compRatio = el('input', { type: 'number', step: '0.1', min: '1' });
-  const timeAttack = el('input', { type: 'number', step: '0.1', min: '0' });
-  const timeRelease = el('input', { type: 'number', step: '0.1', min: '0' });
+  const filtFreq = el('input', { type: 'number', step: '1', min: BOUNDS.freqHz.min, max: BOUNDS.freqHz.max });
+  const filtQ = el('input', { type: 'number', step: '0.01', min: BOUNDS.q.min, max: BOUNDS.q.max });
+  const compGain = el('input', { type: 'number', step: '0.1', min: BOUNDS.gainDb.min, max: BOUNDS.gainDb.max });
+  const compThresh = el('input', { type: 'number', step: '0.1', min: BOUNDS.thresholdDb.min, max: BOUNDS.thresholdDb.max });
+  const compRatio = el('input', { type: 'number', step: '0.1', min: BOUNDS.ratio.min, max: BOUNDS.ratio.max });
+  const timeAttack = el('input', { type: 'number', step: '0.1', min: BOUNDS.timeMs.min, max: BOUNDS.timeMs.max });
+  const timeRelease = el('input', { type: 'number', step: '0.1', min: BOUNDS.timeMs.min, max: BOUNDS.timeMs.max });
 
   async function commitFilt() {
     const type = enableToggle.checked ? filtType.value : 'OFF';
-    const freq = parseFloat(filtFreq.value) || 0;
-    const q = parseFloat(filtQ.value) || 0;
+    const freq = clampNum(filtFreq.value, BOUNDS.freqHz, 40);
+    const q = clampNum(filtQ.value, BOUNDS.q, 1);
+    filtFreq.value = freq;
+    filtQ.value = q;
     try {
       await protocol.setDeqFilt(ch, band, type, freq, q);
       store.set((s) => channelPatch(s, ch, (c) => ({ ...c, deq: { ...c.deq, [band]: { ...c.deq[band], filt: { type, freq, q } } } })));
@@ -27,9 +29,12 @@ function deqBand(ch, band, { store, protocol, log }) {
     }
   }
   async function commitComp() {
-    const gain = parseFloat(compGain.value) || 0;
-    const threshold = parseFloat(compThresh.value) || 0;
-    const ratio = parseFloat(compRatio.value) || 1;
+    const gain = clampNum(compGain.value, BOUNDS.gainDb, 0);
+    const threshold = clampNum(compThresh.value, BOUNDS.thresholdDb, -20);
+    const ratio = clampNum(compRatio.value, BOUNDS.ratio, 1);
+    compGain.value = gain;
+    compThresh.value = threshold;
+    compRatio.value = ratio;
     try {
       await protocol.setDeqComp(ch, band, gain, threshold, ratio);
       store.set((s) => channelPatch(s, ch, (c) => ({ ...c, deq: { ...c.deq, [band]: { ...c.deq[band], comp: { gain, threshold, ratio } } } })));
@@ -39,8 +44,10 @@ function deqBand(ch, band, { store, protocol, log }) {
     }
   }
   async function commitTime() {
-    const attack = parseFloat(timeAttack.value) || 0;
-    const release = parseFloat(timeRelease.value) || 0;
+    const attack = clampNum(timeAttack.value, BOUNDS.timeMs, 0);
+    const release = clampNum(timeRelease.value, BOUNDS.timeMs, 0);
+    timeAttack.value = attack;
+    timeRelease.value = release;
     try {
       await protocol.setDeqTime(ch, band, attack, release);
       store.set((s) => channelPatch(s, ch, (c) => ({ ...c, deq: { ...c.deq, [band]: { ...c.deq[band], time: { attack, release } } } })));

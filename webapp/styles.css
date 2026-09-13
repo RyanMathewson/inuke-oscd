@@ -139,6 +139,31 @@ input[type="range"] { width: 100%; }
 .band-header strong { font-size: 0.85rem; }
 .band.disabled { opacity: 0.55; }
 
+.peq-bands {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+}
+.band-col {
+  flex: 1 1 0;
+  min-width: 90px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem;
+}
+.band-col.disabled { opacity: 0.55; }
+.band-col-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+.band-col-header strong { font-size: 0.85rem; }
+.band-col .field { margin-bottom: 0.5rem; }
+.band-col .field:last-child { margin-bottom: 0; }
+.band-col .field input, .band-col .field select { width: 100%; padding: 0.3rem 0.35rem; font-size: 0.85rem; }
+
 .toggle {
   appearance: none;
   width: 2.2rem;
@@ -251,3 +276,24 @@ details.advanced summary { cursor: pointer; color: var(--muted); font-size: 0.85
   color: var(--muted);
 }
 .eq-chart-labels span { position: absolute; transform: translateX(-50%); }
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+.modal-box {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.25rem;
+  max-width: 26rem;
+  width: 100%;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+.modal-box p { margin: 0 0 1rem; }

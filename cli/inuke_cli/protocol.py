@@ -24,6 +24,17 @@ PID = 0x1101
 REPORT_LEN = 63
 DEFAULT_TIMEOUT_S = 2.0
 
+# Minimum gap enforced between any two outgoing messages (GET or SET). A
+# burst of unpaced SETs (e.g. writing all 8 PEQ bands back-to-back) was
+# observed to silently drop some writes on real hardware -- the device
+# accepted the USB transfers but didn't apply every one. This wasn't
+# something the existing GET-only sequential flows (naturally paced by
+# round-trip latency) ever hit. The real safe minimum was not isolated
+# precisely (later bursts happened against a device already in a degraded
+# state from the first one), so this is a conservative guess, not a
+# confirmed device spec -- see docs/PROTOCOL_NOTES.md.
+MIN_SEND_INTERVAL_S = 0.075
+
 
 class DeviceTimeoutError(TimeoutError):
     pass
@@ -107,10 +118,17 @@ def _open_real_transport():
 
 
 class INukeClient:
-    def __init__(self, transport=None, default_timeout_s: float = DEFAULT_TIMEOUT_S):
+    def __init__(
+        self,
+        transport=None,
+        default_timeout_s: float = DEFAULT_TIMEOUT_S,
+        min_send_interval_s: float = MIN_SEND_INTERVAL_S,
+    ):
         self._transport = transport if transport is not None else _open_real_transport()
         self._owns_transport = transport is None
         self.default_timeout_s = default_timeout_s
+        self.min_send_interval_s = min_send_interval_s
+        self._last_send_at = 0.0
 
     def close(self) -> None:
         self._transport.close()
@@ -123,12 +141,20 @@ class INukeClient:
 
     # --- raw framing ---
     def send(self, address: str, typetags: str = "", args: Iterable[Any] = ()) -> None:
+        """Every send (from here or from get() below) is paced at least
+        MIN_SEND_INTERVAL_S apart, so a burst of writes (e.g. all 8 PEQ
+        bands) can't outrun what the device can reliably apply."""
         msg = osc_encode(address, typetags, args)
         if len(msg) > REPORT_LEN - 1:
             raise ValueError(f"message too long for one report ({len(msg)} bytes): {address}")
         report = bytes([len(msg)]) + msg
         report = report.ljust(REPORT_LEN, b"\x00")
+
+        wait = self.min_send_interval_s - (time.time() - self._last_send_at)
+        if wait > 0:
+            time.sleep(wait)
         self._transport.write(b"\x00" + report)
+        self._last_send_at = time.time()
 
     def poll(self, timeout_s: float = 1.0) -> Iterator[dict]:
         deadline = time.time() + timeout_s

@@ -4,6 +4,46 @@ from unittest.mock import MagicMock, patch
 from inuke_cli.cli import build_parser, run
 
 
+class ValidationTests(unittest.TestCase):
+    def test_peq_rejects_a_frequency_of_zero(self):
+        with self.assertRaises(SystemExit):
+            build_parser().parse_args(["peq", "1", "1", "PEQ", "0", "0", "1"])
+
+    def test_peq_rejects_a_negative_frequency(self):
+        with self.assertRaises(SystemExit):
+            build_parser().parse_args(["peq", "1", "1", "PEQ", "-100", "0", "1"])
+
+    def test_peq_rejects_gain_beyond_the_conservative_bound(self):
+        with self.assertRaises(SystemExit):
+            build_parser().parse_args(["peq", "1", "1", "PEQ", "1000", "100", "1"])
+
+    def test_peq_rejects_zero_q(self):
+        with self.assertRaises(SystemExit):
+            build_parser().parse_args(["peq", "1", "1", "PEQ", "1000", "0", "0"])
+
+    def test_peq_accepts_values_at_the_boundary(self):
+        args = build_parser().parse_args(["peq", "1", "1", "PEQ", "20000", "24", "20"])
+        self.assertEqual(args.freq, 20000)
+        self.assertEqual(args.gain, 24)
+        self.assertEqual(args.q, 20)
+
+    def test_delay_rejects_a_negative_time(self):
+        with self.assertRaises(SystemExit):
+            build_parser().parse_args(["delay", "1", "-1", "0"])
+
+    def test_amp_name_rejects_an_overly_long_name(self):
+        with self.assertRaises(SystemExit):
+            build_parser().parse_args(["name", "x" * 29])
+
+    def test_amp_name_accepts_a_name_at_the_length_limit(self):
+        args = build_parser().parse_args(["name", "x" * 28])
+        self.assertEqual(args.value, "x" * 28)
+
+    def test_deq_comp_rejects_a_positive_threshold(self):
+        with self.assertRaises(SystemExit):
+            build_parser().parse_args(["deq", "comp", "1", "1", "0", "5", "1"])  # threshold=5 > 0 max
+
+
 class CliDispatchTests(unittest.TestCase):
     def _run(self, argv, client_mock):
         args = build_parser().parse_args(argv)

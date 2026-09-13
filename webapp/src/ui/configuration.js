@@ -1,17 +1,18 @@
-import { el } from '../utils.js';
-import { CHANNELS } from '../constants.js';
+import { el, clampNum } from '../utils.js';
+import { CHANNELS, BOUNDS } from '../constants.js';
 import { channelPatch } from '../state.js';
 
 function channelCard(ch, { store, protocol, log }) {
-  const delayTime = el('input', { type: 'number', step: '0.1', min: '0' });
+  const delayTime = el('input', { type: 'number', step: '0.1', min: BOUNDS.delayMs.min, max: BOUNDS.delayMs.max });
   const phaseSelect = el('select', {}, [el('option', { value: '0' }, '0°'), el('option', { value: '180' }, '180°')]);
-  const thresh = el('input', { type: 'number', step: '0.1' });
-  const release = el('input', { type: 'number', step: '0.1', min: '0' });
-  const hold = el('input', { type: 'number', step: '0.1', min: '0' });
+  const thresh = el('input', { type: 'number', step: '0.1', min: BOUNDS.limiterThresholdVp.min, max: BOUNDS.limiterThresholdVp.max });
+  const release = el('input', { type: 'number', step: '0.1', min: BOUNDS.timeMs.min, max: BOUNDS.timeMs.max });
+  const hold = el('input', { type: 'number', step: '0.1', min: BOUNDS.timeMs.min, max: BOUNDS.timeMs.max });
 
   async function commitDelay() {
-    const timeMs = parseFloat(delayTime.value) || 0;
+    const timeMs = clampNum(delayTime.value, BOUNDS.delayMs, 0);
     const phaseDeg = parseInt(phaseSelect.value, 10);
+    delayTime.value = timeMs;
     try {
       await protocol.setDelay(ch, timeMs, phaseDeg);
       store.set((s) => channelPatch(s, ch, (c) => ({ ...c, delay: { timeMs, phaseDeg } })));
@@ -21,9 +22,12 @@ function channelCard(ch, { store, protocol, log }) {
     }
   }
   async function commitLimiter() {
-    const thresholdVp = parseFloat(thresh.value) || 0;
-    const releaseMs = parseFloat(release.value) || 0;
-    const holdMs = parseFloat(hold.value) || 0;
+    const thresholdVp = clampNum(thresh.value, BOUNDS.limiterThresholdVp, 70);
+    const releaseMs = clampNum(release.value, BOUNDS.timeMs, 0);
+    const holdMs = clampNum(hold.value, BOUNDS.timeMs, 0);
+    thresh.value = thresholdVp;
+    release.value = releaseMs;
+    hold.value = holdMs;
     try {
       await protocol.setLimiter(ch, thresholdVp, releaseMs, holdMs);
       store.set((s) => channelPatch(s, ch, (c) => ({ ...c, limiter: { thresholdVp, releaseMs, holdMs } })));
