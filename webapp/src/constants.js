@@ -31,6 +31,13 @@ export const CHANNELS = [1, 2];
 export const PEQ_BANDS = [1, 2, 3, 4, 5, 6, 7, 8];
 export const DEQ_BANDS = [1, 2];
 
+// Standard speaker impedances for the Configuration tab's Load calculator.
+// Purely a client-side convenience (see limiter-math.js's peakWatts) --
+// PROTOCOL_NOTES.md confirms the legacy app's own Load dropdown sent
+// nothing on the wire either, so there's no device value to read here.
+export const LOAD_OHMS_OPTIONS = [2, 4, 8, 16];
+export const DEFAULT_LOAD_OHMS = 8;
+
 // Conservative input-validation bounds. None of these are documented device
 // limits -- PROTOCOL_NOTES.md never pinned down the amp's actual valid
 // ranges for these fields -- so these are deliberately generous guesses

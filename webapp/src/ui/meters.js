@@ -19,7 +19,7 @@ export function mountMeters(container, { store }) {
   const rows = METERS.map(({ key, label }) => {
     const fill = el('div', { class: 'meter-fill' });
     const valueText = el('span', { class: 'note', style: 'width:4.5rem;text-align:right' }, '0.0000');
-    const row = el('div', { class: 'meter', title: 'Linear amplitude; display scale is an approximation, not calibrated to clipping (see PROTOCOL_NOTES.md Open Questions #5).' }, [
+    const row = el('div', { class: 'meter', title: 'Linear amplitude; display scale is an approximation, not calibrated to clipping.' }, [
       el('span', { class: 'meter-label' }, label),
       el('div', { class: 'meter-track' }, [fill]),
       valueText,

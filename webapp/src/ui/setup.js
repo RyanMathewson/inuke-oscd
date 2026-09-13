@@ -100,7 +100,7 @@ export function mountSetup(container, { store, protocol, log }) {
       el('button', { onclick: async () => { try { await protocol.goOffline(); log('Sent /offline (device will stop replying to GETs until /online)'); } catch (err) { log(err.message, true); } } }, 'Send /offline'),
     ]),
     el('div', { class: 'field' }, [el('label', {}, 'Lock state (only pushed by the device after /online)'), lockValue]),
-    el('p', { class: 'note' }, 'If parameter reads stop returning values, try "Send /online" first -- see PROTOCOL_NOTES.md, Critical gotcha #3.'),
+    el('p', { class: 'note' }, 'If parameter reads stop returning values, try "Send /online" first -- the amp can silently stop replying to reads until it\'s told a session is starting again.'),
   ]);
 
   container.append(
@@ -130,7 +130,7 @@ export function mountSetup(container, { store, protocol, log }) {
       ]),
       el('div', { class: 'field' }, [el('label', {}, 'Amp mode'), modeSelect]),
       el('div', { class: 'field' }, [
-        el('label', {}, 'Gain (read-only -- SET does not stick on real hardware, see PROTOCOL_NOTES.md)'),
+        el('label', {}, 'Gain (read-only)'),
         gainValue,
       ]),
     ]),

@@ -83,7 +83,7 @@ function channelCard(ch, ctx) {
     el('div', { class: 'chart-wrap' }, [
       chart.svg,
       chart.labelsEl,
-      el('p', { class: 'note' }, 'Combined HP+LP roll-off shape. Approximate -- see curve-math.js.'),
+      el('p', { class: 'note' }, 'Combined HP+LP roll-off shape (approximate -- a visual guide to the configured slope/frequency, not a precision emulation of the amp\'s exact filter response).'),
     ]),
     hp.row,
     lp.row,

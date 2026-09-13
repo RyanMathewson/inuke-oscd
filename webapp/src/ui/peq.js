@@ -109,7 +109,7 @@ function channelCard(ch, ctx) {
     el('div', { class: 'chart-wrap' }, [
       chart.svg,
       chart.labelsEl,
-      el('p', { class: 'note' }, 'Combined response of all 8 bands. Approximate -- see curve-math.js for what this curve does and doesn\'t model.'),
+      el('p', { class: 'note' }, 'Combined response of all 8 bands (approximate -- a visual guide to the configured frequency/gain/Q, not a precision emulation of the amp\'s exact filter response).'),
     ]),
     el('div', { class: 'peq-bands' }, bands.map((b) => b.el)),
   ]);

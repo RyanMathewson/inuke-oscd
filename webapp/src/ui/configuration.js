@@ -1,13 +1,34 @@
 import { el, clampNum } from '../utils.js';
-import { CHANNELS, BOUNDS } from '../constants.js';
+import { CHANNELS, BOUNDS, LOAD_OHMS_OPTIONS } from '../constants.js';
 import { channelPatch } from '../state.js';
+import { vpToDbfsEstimate, peakWatts } from '../limiter-math.js';
 
 function channelCard(ch, { store, protocol, log }) {
   const delayTime = el('input', { type: 'number', step: '0.1', min: BOUNDS.delayMs.min, max: BOUNDS.delayMs.max });
   const phaseSelect = el('select', {}, [el('option', { value: '0' }, '0°'), el('option', { value: '180' }, '180°')]);
   const thresh = el('input', { type: 'number', step: '0.1', min: BOUNDS.limiterThresholdVp.min, max: BOUNDS.limiterThresholdVp.max });
+  const threshDbfs = el('span', {
+    class: 'note',
+    title: 'Estimated -- the amp\'s exact Vp-to-dBFS formula was never confirmed; this is inferred from one observed reference point, not a precision reproduction.',
+  });
+  const loadSelect = el('select', {}, [
+    el('option', { value: '', selected: true }, 'Select load...'),
+    ...LOAD_OHMS_OPTIONS.map((o) => el('option', { value: String(o) }, `${o} Ω`)),
+  ]);
+  const wattsNote = el('span', {
+    class: 'note',
+    title: 'Client-side only, like the original app\'s Load selector -- never sent to or read from the amp.',
+  });
   const release = el('input', { type: 'number', step: '0.1', min: BOUNDS.timeMs.min, max: BOUNDS.timeMs.max });
   const hold = el('input', { type: 'number', step: '0.1', min: BOUNDS.timeMs.min, max: BOUNDS.timeMs.max });
+
+  function updateThreshDerived() {
+    const vp = parseFloat(thresh.value);
+    threshDbfs.textContent = Number.isFinite(vp) && vp > 0 ? `≈ ${vpToDbfsEstimate(vp).toFixed(1)} dBFS (est.)` : '';
+    const ohms = parseFloat(loadSelect.value);
+    wattsNote.textContent =
+      Number.isFinite(vp) && vp > 0 && Number.isFinite(ohms) && ohms > 0 ? `= ${peakWatts(vp, ohms).toFixed(1)} W peak` : '';
+  }
 
   async function commitDelay() {
     const timeMs = clampNum(delayTime.value, BOUNDS.delayMs, 0);
@@ -28,6 +49,7 @@ function channelCard(ch, { store, protocol, log }) {
     thresh.value = thresholdVp;
     release.value = releaseMs;
     hold.value = holdMs;
+    updateThreshDerived();
     try {
       await protocol.setLimiter(ch, thresholdVp, releaseMs, holdMs);
       store.set((s) => channelPatch(s, ch, (c) => ({ ...c, limiter: { thresholdVp, releaseMs, holdMs } })));
@@ -40,6 +62,8 @@ function channelCard(ch, { store, protocol, log }) {
   delayTime.addEventListener('change', commitDelay);
   phaseSelect.addEventListener('change', commitDelay);
   thresh.addEventListener('change', commitLimiter);
+  thresh.addEventListener('input', updateThreshDerived);
+  loadSelect.addEventListener('change', updateThreshDerived);
   release.addEventListener('change', commitLimiter);
   hold.addEventListener('change', commitLimiter);
 
@@ -51,12 +75,17 @@ function channelCard(ch, { store, protocol, log }) {
       el('div', { class: 'field' }, [el('label', {}, 'Phase'), phaseSelect]),
     ]),
     el('h3', {}, 'Limiter'),
-    el('div', { class: 'field-row' }, [
-      el('div', { class: 'field' }, [el('label', {}, 'Threshold (V peak)'), thresh]),
+    el('div', { class: 'field-row', style: 'align-items:flex-start' }, [
+      el('div', { class: 'field' }, [
+        el('label', {}, 'Threshold (V peak)'),
+        thresh,
+        el('span', { class: 'note' }, 'Peak volts, not dBFS.'),
+        threshDbfs,
+      ]),
       el('div', { class: 'field' }, [el('label', {}, 'Release (ms)'), release]),
       el('div', { class: 'field' }, [el('label', {}, 'Hold (ms)'), hold]),
     ]),
-    el('p', { class: 'note' }, 'Threshold is peak volts on the wire, not dBFS -- the vendor app\'s dBFS readout is a locally-computed display whose exact scale was never reverse-engineered, so it isn\'t reproduced here (see PROTOCOL_NOTES.md).'),
+    el('div', { class: 'field' }, [el('label', {}, 'Load'), loadSelect, wattsNote]),
   ]);
 
   const sync = (state) => {
@@ -66,6 +95,7 @@ function channelCard(ch, { store, protocol, log }) {
     if (document.activeElement !== thresh) thresh.value = c.limiter.thresholdVp.toFixed(1);
     if (document.activeElement !== release) release.value = c.limiter.releaseMs.toFixed(1);
     if (document.activeElement !== hold) hold.value = c.limiter.holdMs.toFixed(1);
+    updateThreshDerived();
   };
 
   return { card, sync };
