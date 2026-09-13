@@ -1,4 +1,0 @@
-Changes:
-- improved float values display (rounding) (V1.4)
-- finer step size for filter qual(ity) values (V1.3)
-- new model NU12000DSP added (V1.2)

@@ -3,7 +3,7 @@
 __pycache__/
 *.pyc
 
-# Vendor-copyrighted files: kept locally for reference, not published
-iNukeRemoteConnect_V1.4/*.exe
-iNukeUsbUpdate_V1.3/*.exe
+# Vendor files: kept locally for reference, not published
+iNukeRemoteConnect_V1.4/
+iNukeUsbUpdate_V1.3/
 user_manual.pdf
