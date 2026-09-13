@@ -6,8 +6,11 @@ series) well enough to reimplement it as an open-source replacement.
 
 Status: protocol is well-understood — confirmed via live USBPcap captures and
 a working independent client (`scripts/inuke_client.py`) against a real
-NU3000DSP, plus a full pass through the legacy app's UI. See "Open questions"
-near the end for the specific things that are still genuinely unconfirmed.
+NU3000DSP, plus a full pass through the legacy app's UI. Two independent
+replacement clients are now built on top of it: a browser-based (WebHID) GUI
+in `webapp/` and a cross-platform Python CLI in `cli/` — see the root
+README's Status section. See "Open questions" near the end for the specific
+things that are still genuinely unconfirmed.
 
 **How to read this document**: this section (Quick Reference) is everything
 you need to start building a client — the full address table, the framing

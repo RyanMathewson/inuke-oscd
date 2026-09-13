@@ -9,8 +9,9 @@ talks to the amp directly — no vendor app required.
 
 ## Status
 
-**Protocol: well understood and documented. Client: early/minimal, not yet a
-full replacement app.**
+**Protocol: well understood and documented. Two independent replacement
+clients exist, both with full feature parity against the vendor app's
+editable parameters.**
 
 - The full wire protocol is reverse-engineered and confirmed against a real
   NU3000DSP: USB/HID transport and framing, the OSC message encoding, the
@@ -22,11 +23,23 @@ full replacement app.**
   needed to build a client (transport, framing, the complete address
   table, and the gotchas) — the rest of that document is the supporting
   capture-by-capture evidence and the still-open questions.
-- [`scripts/inuke_client.py`](scripts/inuke_client.py) is a minimal working
-  Python client (via `hidapi`) that can read and write any parameter
-  directly, independent of the vendor app. It's a building block, not a
-  finished tool — there's no CLI, no GUI, and no typed/named helpers per
-  parameter yet (just a generic `send(address, typetags, args)` / `poll()`).
+- **[`webapp/`](webapp/)** — a browser-based GUI replacement built on
+  [WebHID](https://developer.mozilla.org/en-US/docs/Web/API/WebHID_API):
+  no install, no server, talks to the amp directly from a Chrome/Edge/Opera
+  tab. Covers amp mode/name, 8-band PEQ and crossover per channel, dynamic
+  EQ, delay/phase, limiter, live meters, and the 20 onboard presets. See
+  [`webapp/README.md`](webapp/README.md) for how to run it and its known
+  limitations (WebHID is Chromium-only; Lock/Unlock is deliberately not
+  implemented).
+- **[`cli/`](cli/)** — a cross-platform (Windows/macOS/Linux) Python CLI
+  and library (`pip install -e cli/`, installs the `inuke` command) for the
+  same parameter set, plus JSON output for scripting and a full-state
+  JSON backup/restore that the vendor app never had. See
+  [`cli/README.md`](cli/README.md).
+- [`scripts/inuke_client.py`](scripts/inuke_client.py) is the original
+  minimal Python client (via `hidapi`) this was all bootstrapped from —
+  kept as-is as a research/debugging tool; `cli/` is the polished,
+  typed, tested descendant of it.
 - Several supporting scripts exist for analysis and safety, not end-user
   use: [`scripts/parse_osc.py`](scripts/parse_osc.py) /
   [`parse_osc_in.py`](scripts/parse_osc_in.py) decode OSC traffic out of a
@@ -40,10 +53,13 @@ full replacement app.**
   pixel coordinates rather than named UI elements). It's a research tool,
   not something an end user needs.
 
-**What's not here yet**: a real replacement application (GUI or otherwise)
-with the same feature set as the original — mode/EQ/crossover/dynamic-EQ/
-limiter editing, preset management, live metering — built on top of the
-confirmed protocol. That's the natural next phase.
+**What's not here yet**: Lock/Unlock in either client (deliberately
+untested against real hardware — see PROTOCOL_NOTES.md), and real-world
+testing of the web app against actual hardware from someone other than the
+person who wrote it (its OSC/protocol logic is unit-tested against captured
+packets, and the CLI has been exercised against a real NU3000DSP, but the
+WebHID connect flow itself needs a human clicking through the browser's
+native device picker to verify end-to-end).
 
 ## Hardware scope
 

@@ -1,0 +1,11 @@
+{
+  "name": "inuke-webapp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser-based (WebHID) replacement for the iNuke Remote Connect vendor app.",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "serve": "node -e \"const {createServer}=require('http'),{createReadStream,existsSync,statSync}=require('fs'),path=require('path');const root=process.cwd();const types={'.html':'text/html','.js':'text/javascript','.css':'text/css'};createServer((req,res)=>{let p=path.join(root,decodeURIComponent(req.url.split('?')[0]));if(existsSync(p)&&statSync(p).isDirectory())p=path.join(p,'index.html');if(!existsSync(p)){res.writeHead(404);res.end('not found');return}res.writeHead(200,{'Content-Type':types[path.extname(p)]||'application/octet-stream'});createReadStream(p).pipe(res)}).listen(8000,()=>console.log('http://localhost:8000'))\""
+  }
+}

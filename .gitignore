@@ -2,6 +2,8 @@
 *.strings.txt
 __pycache__/
 *.pyc
+*.egg-info/
+node_modules/
 
 # Vendor files: kept locally for reference, not published
 iNukeRemoteConnect_V1.4/

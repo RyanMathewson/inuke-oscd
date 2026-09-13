@@ -1,0 +1,19 @@
+[project]
+name = "inuke-cli"
+version = "0.1.0"
+description = "Cross-platform CLI for Behringer iNuke DSP power amps (USB/HID/OSC), replacing the discontinued iNuke Remote Connect app."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+dependencies = ["hidapi>=0.14"]
+
+[project.scripts]
+inuke = "inuke_cli.cli:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["inuke_cli*"]
