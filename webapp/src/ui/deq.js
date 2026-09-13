@@ -1,6 +1,7 @@
 import { el } from '../utils.js';
 import { CHANNELS, DEQ_BANDS, DEQ_FILT_TYPES } from '../constants.js';
 import { channelPatch } from '../state.js';
+import { createEqChart } from './eq-chart.js';
 
 function deqBand(ch, band, { store, protocol, log }) {
   const enableToggle = el('input', { type: 'checkbox', class: 'toggle' });
@@ -53,8 +54,16 @@ function deqBand(ch, band, { store, protocol, log }) {
   [compGain, compThresh, compRatio].forEach((n) => n.addEventListener('change', commitComp));
   [timeAttack, timeRelease].forEach((n) => n.addEventListener('change', commitTime));
 
+  const chart = createEqChart({ dbMin: -50, dbMax: 0, dbStep: 10 });
+  chart.setCurve(() => 0);
+
   const bandEl = el('div', { class: 'band' }, [
     el('div', { class: 'band-header' }, [el('strong', {}, `DEQ ${band}`), enableToggle]),
+    el('div', { class: 'chart-wrap' }, [
+      chart.svg,
+      chart.labelsEl,
+      el('p', { class: 'note' }, 'Marker shows the sidechain filter\'s center frequency -- gain is signal-dependent, so there\'s no static curve to draw.'),
+    ]),
     el('h3', {}, 'Sidechain filter'),
     el('div', { class: 'field-row' }, [
       el('div', { class: 'field', style: 'flex:1.2' }, [el('label', {}, 'Type'), filtType]),
@@ -87,6 +96,8 @@ function deqBand(ch, band, { store, protocol, log }) {
     if (document.activeElement !== compRatio) compRatio.value = d.comp.ratio.toFixed(1);
     if (document.activeElement !== timeAttack) timeAttack.value = d.time.attack.toFixed(1);
     if (document.activeElement !== timeRelease) timeRelease.value = d.time.release.toFixed(1);
+
+    chart.setMarkers([{ label: band, freq: d.filt.freq || 20, db: 0, disabled: !enabled }]);
   };
 
   return { el: bandEl, sync };

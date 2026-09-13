@@ -1,6 +1,8 @@
 import { el } from '../utils.js';
 import { CHANNELS, XOVER_FAMILIES, XOVER_FAMILY_LABELS, XOVER_SLOPES } from '../constants.js';
 import { channelPatch } from '../state.js';
+import { createEqChart } from './eq-chart.js';
+import { xoverCurveDb } from '../curve-math.js';
 
 function parseXoverType(type) {
   if (!type || type === 'OFF') return { family: 'OFF', slope: 12 };
@@ -72,8 +74,15 @@ function channelCard(ch, ctx) {
     }
   });
 
+  const chart = createEqChart({ dbMin: -30, dbMax: 15, dbStep: 15 });
+
   const card = el('div', { class: 'card' }, [
     el('h2', {}, `Channel ${ch === 1 ? 'A' : 'B'}`),
+    el('div', { class: 'chart-wrap' }, [
+      chart.svg,
+      chart.labelsEl,
+      el('p', { class: 'note' }, 'Combined HP+LP roll-off shape. Approximate -- see curve-math.js.'),
+    ]),
     hp.row,
     lp.row,
     el('div', { class: 'field' }, [el('label', {}, 'Crossover Gain (dB)'), gainInput]),
@@ -83,6 +92,14 @@ function channelCard(ch, ctx) {
     hp.sync(state);
     lp.sync(state);
     if (document.activeElement !== gainInput) gainInput.value = state.channels[ch].xover.gain.toFixed(1);
+
+    const { hp: hpState, lp: lpState, gain } = state.channels[ch].xover;
+    const curveFn = (f) => xoverCurveDb(hpState, lpState, gain, f);
+    chart.setCurve(curveFn);
+    const markers = [];
+    if (hpState.type !== 'OFF') markers.push({ label: 'HP', freq: hpState.freq || 20, db: curveFn(hpState.freq || 20) });
+    if (lpState.type !== 'OFF') markers.push({ label: 'LP', freq: lpState.freq || 20000, db: curveFn(lpState.freq || 20000) });
+    chart.setMarkers(markers);
   };
 
   return { card, sync };

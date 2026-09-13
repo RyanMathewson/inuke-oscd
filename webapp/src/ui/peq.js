@@ -1,6 +1,8 @@
 import { el } from '../utils.js';
 import { CHANNELS, PEQ_BANDS, PEQ_TYPES } from '../constants.js';
 import { channelPatch } from '../state.js';
+import { createEqChart } from './eq-chart.js';
+import { peqCurveDb } from '../curve-math.js';
 
 function peqBand(ch, band, { store, protocol, log }) {
   const enableToggle = el('input', { type: 'checkbox', class: 'toggle' });
@@ -50,8 +52,31 @@ function peqBand(ch, band, { store, protocol, log }) {
 
 function channelCard(ch, ctx) {
   const bands = PEQ_BANDS.map((b) => peqBand(ch, b, ctx));
-  const card = el('div', { class: 'card' }, [el('h2', {}, `Channel ${ch === 1 ? 'A' : 'B'}`), ...bands.map((b) => b.el)]);
-  const sync = (state) => bands.forEach((b) => b.sync(state));
+  const chart = createEqChart({ dbMin: -15, dbMax: 15, dbStep: 5 });
+  const card = el('div', { class: 'card' }, [
+    el('h2', {}, `Channel ${ch === 1 ? 'A' : 'B'}`),
+    el('div', { class: 'chart-wrap' }, [
+      chart.svg,
+      chart.labelsEl,
+      el('p', { class: 'note' }, 'Combined response of all 8 bands. Approximate -- see curve-math.js for what this curve does and doesn\'t model.'),
+    ]),
+    ...bands.map((b) => b.el),
+  ]);
+
+  const sync = (state) => {
+    bands.forEach((b) => b.sync(state));
+    const peqState = state.channels[ch].peq;
+    const bandList = PEQ_BANDS.map((b) => peqState[b]);
+    chart.setCurve((f) => peqCurveDb(bandList, f));
+    chart.setMarkers(
+      PEQ_BANDS.map((b) => {
+        const p = peqState[b];
+        const disabled = p.type === 'OFF';
+        return { label: b, freq: p.freq || 20, db: disabled ? 0 : p.gain, disabled };
+      }),
+    );
+  };
+
   return { card, sync };
 }
 
