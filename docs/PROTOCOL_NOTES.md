@@ -9,6 +9,99 @@ a working independent client (`scripts/inuke_client.py`) against a real
 NU3000DSP, plus a full pass through the legacy app's UI. See "Open questions"
 near the end for the specific things that are still genuinely unconfirmed.
 
+**How to read this document**: this section (Quick Reference) is everything
+you need to start building a client — the full address table, the framing
+rules, and the gotchas that will bite you if you skip them. Everything after
+"Hardware / transport" is the supporting evidence and discovery narrative
+(capture-by-capture proof for every claim above) — useful for verifying a
+claim or understanding *why* something works the way it does, not required
+reading to get started. "Open questions" near the end lists everything that
+is genuinely still unconfirmed; don't assume anything not in this doc.
+
+## Quick Reference
+
+### Transport (see "CONFIRMED: USB wire protocol" for full detail)
+
+- Device: HID, vendor-defined usage page, `VID_1397 PID_1101` (Behringer/
+  Music Group). One interrupt endpoint, `0x81` IN, 64 bytes.
+- **No interrupt OUT endpoint on this hardware.** Host->device writes go
+  through a HID `SET_REPORT` **control transfer**: `bmRequestType=0x21`,
+  `bRequest=0x09`, `wValue=0x0200` (Output, ReportID 0), `wIndex=0x0000`,
+  `wLength=0x3F` (63 bytes).
+- Every 63-byte report, either direction, is: `byte[0]` = length `N` of an
+  embedded OSC 1.0 message, then `N` bytes of that message, then don't-care
+  padding (**not guaranteed zero** — truncate at the length byte, never read
+  past it).
+- The embedded message is standard binary OSC: NUL-padded address string
+  (multiple of 4 bytes), NUL-padded `,typetags` string (multiple of 4
+  bytes), then big-endian `f`(float32)/`i`(int32) or NUL-padded `s`(string)
+  args in order. No bundle wrapper, no checksum, no sequence number.
+- **GET is a SET with no arguments**: send the bare address with an empty
+  type tag string (zero declared args). The device answers with an
+  ordinary-looking report on the same address, now with real args. Same
+  format both directions.
+
+### Address table
+
+All addresses below are GET-able (send bare, get a populated reply) and
+SET-able (send with real args to change the amp) unless the Notes column
+says otherwise. `<N>` = channel, `1` or `2`.
+
+| Address | Typetags | Args (in order) | Notes |
+|---|---|---|---|
+| `/info` | `ssi` | `amp_name, firmware_version_str, unknown_int` | `amp_name` is the same value `/ampname` sets (not a fixed model string). `unknown_int` observed constant (`5`) across all ampmodes; meaning not determined. GET only — SET not tested/expected. |
+| `/ampname` | `s` | `name` | Sets the amp's display name. SET confirmed live; GET not separately tested but presumably works like everything else. |
+| `/online` | (empty) | — | **Trigger, not a value.** Marks the session "online": makes the device push `/lock` once. Can also spontaneously trigger the vendor app's "device connected" dialog if it's running concurrently. |
+| `/offline` | (empty) | — | **Trigger.** Suspends the device's replies to GET queries until `/online` is sent again. Does not alter or lose any DSP parameter — purely a communication state. **If queries suddenly get no replies, send `/online` again before assuming something is broken** — this has also been observed once with no clear cause. |
+| `/lock` | `i` | `0` or `1` (presumed unlocked/locked) | Only ever observed pushed by the device after `/online`; a bare GET on `/lock` itself gets no reply. SET never tested (see Lock/Unlock, deliberately untested). |
+| `/gain` | `ffii` | `?, ?, ?, ?` (shape suggests `gainA_dB, gainB_dB, muteA, muteB`) | GET works and returns `[0.0, 0.0, 0, 0]`. **SET does not stick** — wire-verified correct bytes reach the device but a follow-up GET shows no change, and there's no UI control for it anywhere. Treat as read-only; likely reflects a hardware-level (rear-panel trim pot?) state rather than a DSP parameter. |
+| `/ampmode` | `s` | `mode` | One of `DUAL`, `STEREO`, `BIAMP1`, `BIAMP2`, `BRIDGED`. Full, closed set — matches all 5 Mode buttons in the UI exactly. |
+| `/channel/<N>/peq/<1-8>` | `sfff` | `type, freq_hz, gain_db, Q` | `type` ∈ `PEQ, LS6, LS12, HS6, HS12` (same list for every band) **or** `OFF`. `OFF` is set by the per-band "Filter N" enable toggle in the UI, not by this dropdown — disabling a band puts `OFF` here while the UI's own type dropdown keeps showing whatever shape was last selected (**the wire value and the UI display can diverge — always trust the wire**). `freq_hz` is a plain float, not the `.arp` file's `4k00`-style shorthand. |
+| `/channel/<N>/xover/hp` | `sf` | `type, freq_hz` | `type` = `OFF` or `<FAMILY><slope>`, one token, e.g. `BUT24`, `BES12`, `LR12`, `BUT6`, `BUT48`. Families: `BUT`/`BES`/`LR` (Butterworth/Bessel/Linkwitz-Riley). Slopes: `6/12/18/24/48` (dB/oct), **no zero-padding** at any width. |
+| `/channel/<N>/xover/lp` | `sf` | `type, freq_hz` | Same encoding as `xover/hp`. |
+| `/channel/<N>/xover/gain` | `f` | `gain_db` | |
+| `/channel/<N>/deq/<1-2>/comp` | `fff` | `gain_db, threshold_db, ratio` | |
+| `/channel/<N>/deq/<1-2>/time` | `ff` | `attack_ms, release_ms` | |
+| `/channel/<N>/deq/<1-2>/filt` | `sff` | `type, freq_hz, Q` | `type` ∈ `BP, LP6, LP12, HP6, HP12` or `OFF`. Same "OFF via the 'DEQ N' enable toggle, not this list" pattern as PEQ — same wire-vs-UI-display caveat applies. |
+| `/channel/<N>/delay` | `fi` | `time_ms, phase_degrees` | The UI shows delay in ms/m/ft, but those are just three unit-converted *displays* of this one float — there's no separate wire field per unit. The int is **Phase** (`0` or `180`), not a unit selector. |
+| `/channel/<N>/limiter` | `fff` | `threshold_Vp, release_ms, hold_ms` | Threshold is in **peak volts**, not dBFS — the UI's dBFS readout is a locally-computed alternate display; dBFS itself is never on the wire. |
+| `/meter` | `f` (host->device) / `ffff` (device->host) | `refresh_rate_hz` / `input_A, input_B, output_A, output_B` | Host sends `,f 10.0` roughly every 5s (looks like a keepalive/rate-set for the telemetry stream — not proven by deliberately changing the value). Device pushes `,ffff` unsolicited ~10x/sec regardless. Values are **linear amplitude**, not dB; scale top and peak-vs-RMS not yet confirmed (needs a loud/clipping signal — see Open Questions #5). |
+| `/preset/name` | `iis` | `slot(1-20), ?, name` | GET only tested. Unused slots reply with name `"EMPTY"`. 20 onboard slots. |
+| `/preset/save` | `iis` | `slot(1-20), ampmode_enum, name` | This is what the Setup tab's "Store" button sends. `ampmode_enum`: `DUAL=0, STEREO=1, BIAMP1=2, BIAMP2=3, BRIDGED=4`. Confirmed the amp snapshots its *entire* current DSP state server-side (both channels) — the message itself doesn't carry the parameter values. |
+| `/preset/load` | `iis` | `slot, 0, name` | This is what "Recall" sends. The int and name here look like non-authoritative placeholders (device already knows what's stored); only `slot` matters. Confirmed the amp applies its full stored state internally (one message on the wire, not ~40 individual SETs). |
+| `/peaklimit` | — | — | Bare GET: no reply, no observable effect. Untested with real arguments. |
+| `/speaker` | — | — | Never observed on the wire for the USB iNuke DSP line. The Configuration tab's "Load" (speaker impedance) dropdown is a **client-side-only** wattage calculation — it sends nothing. May be an AX-series/UDP-only concept, or unused. |
+| `/siggen` | — | — | No UI path exists for the iNuke DSP series (no "Utility" tab) — AX-series only. |
+
+### Preset system
+
+20 onboard slots (1-20), each with a name and an ampmode, managed by
+`/preset/save` (Store) and `/preset/load` (Recall) above. Loading a `.arp`
+file client-side and pushing each line as a SET (what the vendor app does)
+is a *different* mechanism from Recall — both end up changing the same live
+DSP state, but only Recall touches the amp's own onboard slots.
+
+### Critical gotchas
+
+1. **Truncate every report at its length byte.** Bytes past `1+N` are
+   leftover garbage from a previous, differently-sized message in the same
+   buffer — not padding you can rely on being zero.
+2. **`OFF` for PEQ/DEQ bands comes from a toggle button, not the type
+   dropdown**, and the UI's dropdown display can be stale/wrong relative to
+   the actual wire value whenever a band is disabled. Query the wire, don't
+   trust cached UI state.
+3. **`/offline` stops the device from replying to GET queries** until
+   `/online` is sent again — this is a communication-state toggle, not data
+   loss, but it will look like total failure if you don't know about it.
+   This "everything stops replying" state has also been seen once with no
+   `/offline` involved, cause unknown — `/online` fixes it either way.
+4. **`/gain` looks writable at the wire level but isn't** — don't build a
+   gain/mute control on top of it without testing against real hardware
+   first (see the address table entry).
+5. Frequency, dB, and other numeric fields are plain float32 — don't try to
+   parse the `.arp` file's `4k00`-style shorthand as anything other than a
+   save-file text convenience; it's never on the wire.
+
 ## Hardware / transport
 
 - Device enumerates as: `HID\VID_1397&PID_1101` — a **vendor-defined HID
@@ -321,7 +414,7 @@ A standalone parser was written to pull every host->device OSC message out
 of a USBPcap capture: it locates each HID `SET_REPORT` control transfer
 (`21 09` SETUP prefix), reads the `wLength`, reads the 1-byte OSC length
 prefix, and decodes the OSC address/typetags/args. See the script for
-resuse against future captures (device->host meter reports need the same
+reuse against future captures (device->host meter reports need the same
 core `osc_decode()` but sourced from endpoint `0x81` frames instead of
 control-endpoint SETUP-anchored frames).
 

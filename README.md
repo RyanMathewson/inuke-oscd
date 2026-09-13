@@ -16,10 +16,12 @@ full replacement app.**
   NU3000DSP: USB/HID transport and framing, the OSC message encoding, the
   complete parameter address space (amp mode, parametric EQ, crossover,
   dynamic EQ, delay/phase, limiter, meter telemetry, device info, and the
-  20 onboard presets), and how reads/writes/session state work. See
-  [`docs/PROTOCOL_NOTES.md`](docs/PROTOCOL_NOTES.md) for the complete
-  writeup, including the handful of things that are still genuinely
-  unconfirmed.
+  20 onboard presets), and how reads/writes/session state work.
+  **Start with the "Quick Reference" section at the top of
+  [`docs/PROTOCOL_NOTES.md`](docs/PROTOCOL_NOTES.md)** for everything
+  needed to build a client (transport, framing, the complete address
+  table, and the gotchas) — the rest of that document is the supporting
+  capture-by-capture evidence and the still-open questions.
 - [`scripts/inuke_client.py`](scripts/inuke_client.py) is a minimal working
   Python client (via `hidapi`) that can read and write any parameter
   directly, independent of the vendor app. It's a building block, not a
