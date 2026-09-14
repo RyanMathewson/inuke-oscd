@@ -216,24 +216,100 @@ already implemented in both clients.
 - Related-but-not-volume levers: `/channel/<N>/limiter` threshold (peak volts)
   sets an output *ceiling*; PEQ/DEQ band gains shift level per band.
 
-## Other addresses clarified by the firmware
+## Functionality the legacy app never exposed over USB
 
-- **`/siggen`** — the iNuke DSP firmware **does** handle this (it is a real
-  address literal). A live bare GET replied `/siggen ,if [0, 1000.0]`
-  (looks like `[enabled/type=0, freq=1000 Hz]`; the app also has "sine wave
-  level" strings, so a level argument likely exists too). It is simply not
-  wired to any control in the iNuke DSP app (no "Utility" tab). It is a
-  test-tone generator, **not** a program-volume control — do not enable it
-  blind against connected speakers.
-- **`/protect`** — a real firmware address with an error/reporting path, but a
-  bare GET gets no reply from the live amp. Like `/lock`, it is most likely
-  **pushed by the device** as an asynchronous protection-status report
-  (thermal / DC / clip / short), not independently queryable. Not a control.
-- **`/peaklimit`** — present in firmware; bare GET still gets no reply. Likely
-  requires real arguments (matches the earlier capture-side finding).
-- **`/lock` / `/unlock`** — a `lock_handler` exists; `/lock` is pushed once
-  after `/online`. Write-protection state. Still deliberately untested against
-  hardware (risk of locking the amp) — see PROTOCOL_NOTES.
+Diffing the firmware's accepted OSC commands (above) against what the vendor
+app actually transmits (every `captures/*.pcap`) and how its UI is gated turns
+up several device capabilities the app never drives on the USB iNuke DSP line.
+Confidence is labelled per item; **nothing here has been exercised with a live
+*write* yet** — the findings are from the firmware image, the app binary, the
+captures, and read-only GETs.
+
+### Summary
+
+| Command | Firmware status | App behaviour | What it gets you | Confidence |
+|---|---|---|---|---|
+| `/siggen` | Live handler; GET replied `[0, 1000.0]` | Never sent; generator UI is AX-series-only | Onboard signal / test-tone generator | High it exists; med on arg shape |
+| `/protect` | Real address + handler | Never sent | Protection / fault status (thermal, DC, short) | Medium |
+| `/peaklimit` | Real address, distinct from `/channel/<N>/limiter` | Never sent | A separate global limiter feature; purpose unconfirmed | Low |
+| `/meter` arg | Validator checks a time value (`%d sec`) | App hardcodes `,f 10.0` | Custom telemetry rate / window | Medium |
+| `/offline` | Session-suspend trigger | Never sent | Stops replies until `/online`; niche | High it exists |
+| out-of-UI values | Validators are the real bounds | UI sliders clamp tighter | Set values the app's UI can't reach | Medium |
+
+### `/siggen` — onboard signal generator (the big one)
+
+The firmware has a working `/siggen` handler; the app only ever exposes a
+generator for the **AX series** (its UI strings are "Generator (AX Series)",
+"Test Tone", "Pink Noise", "White Noise", "sine wave frequency", "sine wave
+level"; JUCE class `Ciosiggen`), and it sends `/siggen` **zero** times across
+every capture. Yet the live USB amp answered `GET /siggen` with
+`,if [0, 1000.0]` — a real reply that reads as `[enabled=0, frequency=1000 Hz]`.
+
+So the USB iNuke DSP can almost certainly run its built-in generator over USB:
+at minimum a sine tone at a chosen frequency, very likely with a level
+argument, and possibly the pink/white-noise modes the AX generator offers
+(unconfirmed for iNuke). Use case: remote test-tone injection for tuning and
+verification. **Caution:** this drives real audio into the outputs — set a safe
+level first, and expect the SET arg order/count to need confirming (the GET
+shows two args; a SET may take more).
+
+### `/protect` — protection / fault status
+
+A real firmware address with its own handler/reporting path, but a bare GET
+gets no reply from the live amp. Like `/lock`, it is most likely **pushed by
+the device** as an asynchronous protection-status report (thermal / DC / short
+/ clip-protect) rather than something you poll. Potential use: remote fault
+monitoring. Needs probing (watch for an unsolicited push, or try argument
+shapes) to pin down.
+
+### `/peaklimit` — a separate, unused limiter address
+
+Present in firmware and **distinct** from the per-channel `/channel/<N>/limiter`
+that the app does use for its "Limiter". The app never sends `/peaklimit`, and a
+bare GET gets no reply, so its exact function is unconfirmed — possibly a
+global/master peak-limit enable or a legacy address. Probe with arguments,
+cautiously, to characterise.
+
+### `/meter` rate — beyond the hardcoded 10 Hz
+
+The app always sends `/meter ,f 10.0`. The firmware's `meter_handler` validates
+a **time value in seconds** (`got an incorrect time value: %d sec`, with `msec`
+nearby), so the argument controls a metering rate/window the app leaves fixed.
+You may be able to request faster (finer) or slower telemetry. Low risk to
+experiment with.
+
+### Values beyond the app's UI limits
+
+The firmware's per-parameter validators (`xeq_gain got an incorrect value`,
+`delay got an incorrect delay time value`, `filter_peq got an incorrect
+freq/gain/qual value`, `limiter got an incorrect thresh voltage`, …) are the
+*real* accepted ranges, and they are looser than the app's UI sliders. Over USB
+you can set values the app would never let you enter, bounded only by these
+checks. The exact numeric bounds need either disassembling the validators or
+careful empirical probing; both the CLI and web app already send raw values, so
+they are not clamped to the app's UI ranges.
+
+### Exists in firmware but NOT USB-reachable (front-panel only)
+
+The firmware carries a **factory/service self-test** and preset-init routines,
+surfaced as LCD prompts: `TEST AUDIO!`, `CHECK BUTTONS`, `TURN ENCODER L/R`,
+`PRESS ANY BUTTON...`, `CHECK METER LEDS`, and `INIT PRESETS`. These have **no
+OSC address**, so they are entered from the front panel (a button combo at
+boot), not over USB. Listed for completeness.
+
+### Confirmed absent (no OSC address exists)
+
+There is **no** OSC address for remote reboot, standby/power, factory reset,
+temperature/voltage readout (beyond whatever `/protect` reports), fan, serial
+number, or run-hours. Those are not reachable over USB on this firmware.
+
+### `/lock` / `/unlock` (not hidden, noted for context)
+
+The app *does* expose Lock/Unlock in its UI, so these are not hidden — but the
+captures never exercised them. A `lock_handler` exists and `/lock` is pushed
+once after `/online`. A SET to `/lock`/`/unlock` remains deliberately untested
+against hardware (risk of locking the amp); see
+[`PROTOCOL_NOTES.md`](PROTOCOL_NOTES.md).
 
 ## Corrections to PROTOCOL_NOTES.md
 
