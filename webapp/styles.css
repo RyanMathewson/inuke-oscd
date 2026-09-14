@@ -31,6 +31,17 @@
 
 * { box-sizing: border-box; }
 
+html {
+  /* Force the vertical scrollbar to always be present (rather than only
+     when a tab's content overflows), so switching between a tall tab and a
+     short one doesn't shift the page content left/right by the scrollbar's
+     width. (scrollbar-gutter: stable would be the "reserve space but hide
+     the bar" alternative, but it only has an effect when overflow isn't
+     `visible` -- the default -- so it's a no-op here unless paired with
+     this anyway; simpler to just force the bar directly.) */
+  overflow-y: scroll;
+}
+
 body {
   margin: 0;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
