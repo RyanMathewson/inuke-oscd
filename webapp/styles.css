@@ -52,6 +52,10 @@ body {
 
 .topbar h1 { font-size: 1.1rem; margin: 0; }
 
+.brand { display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap; }
+.source-link { font-size: 0.78rem; color: var(--muted); text-decoration: none; }
+.source-link:hover { color: var(--accent); text-decoration: underline; }
+
 .conn { display: flex; align-items: center; gap: 0.5rem; }
 
 .status {
