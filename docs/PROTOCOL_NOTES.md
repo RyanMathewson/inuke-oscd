@@ -12,6 +12,14 @@ in `webapp/` and a cross-platform Python CLI in `cli/` — see the root
 README's Status section. See "Open questions" near the end for the specific
 things that are still genuinely unconfirmed.
 
+**Device-side companion:** the vendor USB firmware updater
+(`iNukeUsbUpdate_V1.3.exe`) embeds the amp's entire firmware image, which gives
+an independent, device-side view of this protocol. Findings from it are written
+up in [`FIRMWARE_NOTES.md`](FIRMWARE_NOTES.md); most importantly it confirms
+`/gain` is read-only *by firmware design* (no setter exists) and that `/siggen`
+is handled by the iNuke DSP firmware after all. Both points are folded into the
+entries below.
+
 **How to read this document**: this section (Quick Reference) is everything
 you need to start building a client — the full address table, the framing
 rules, and the gotchas that will bite you if you skip them. Everything after
@@ -57,12 +65,12 @@ says otherwise. `<N>` = channel, `1` or `2`.
 | `/online` | (empty) | — | **Trigger, not a value.** Marks the session "online": makes the device push `/lock` once. Can also spontaneously trigger the vendor app's "device connected" dialog if it's running concurrently. |
 | `/offline` | (empty) | — | **Trigger.** Suspends the device's replies to GET queries until `/online` is sent again. Does not alter or lose any DSP parameter — purely a communication state. **If queries suddenly get no replies, send `/online` again before assuming something is broken** — this has also been observed once with no clear cause. |
 | `/lock` | `i` | `0` or `1` (presumed unlocked/locked) | Only ever observed pushed by the device after `/online`; a bare GET on `/lock` itself gets no reply. SET never tested (see Lock/Unlock, deliberately untested). |
-| `/gain` | `ffii` | `?, ?, ?, ?` (shape suggests `gainA_dB, gainB_dB, muteA, muteB`) | GET works and returns `[0.0, 0.0, 0, 0]`. **SET does not stick** — wire-verified correct bytes reach the device but a follow-up GET shows no change, and there's no UI control for it anywhere. Treat as read-only; likely reflects a hardware-level (rear-panel trim pot?) state rather than a DSP parameter. |
+| `/gain` | `ffii` | `gainA_dB, gainB_dB, muteA, muteB` | **Read-only — confirmed at the firmware level** (see [`FIRMWARE_NOTES.md`](FIRMWARE_NOTES.md)). The firmware has a gain *reporter* (`osc_send_gain`) but no setter, and no `/gain` address of its own — the string is the compiler-merged suffix of `/xover/gain`. A SET is accepted on the wire and silently discarded (proof in `session4_gaintest.pcap`: host writes `-3.0`, device keeps reporting `0.0`). Reads `[0.0, 0.0, 0, 0]` at all times on the NU3000DSP (0 dB, unmuted). The physical rear-panel level knobs are analog and have **no OSC address at all**. For a remote level/"volume" control use `/channel/<N>/xover/gain` instead. |
 | `/ampmode` | `s` | `mode` | One of `DUAL`, `STEREO`, `BIAMP1`, `BIAMP2`, `BRIDGED`. Full, closed set — matches all 5 Mode buttons in the UI exactly. |
 | `/channel/<N>/peq/<1-8>` | `sfff` | `type, freq_hz, gain_db, Q` | `type` ∈ `PEQ, LS6, LS12, HS6, HS12` (same list for every band) **or** `OFF`. `OFF` is set by the per-band "Filter N" enable toggle in the UI, not by this dropdown — disabling a band puts `OFF` here while the UI's own type dropdown keeps showing whatever shape was last selected (**the wire value and the UI display can diverge — always trust the wire**). `freq_hz` is a plain float, not the `.arp` file's `4k00`-style shorthand. |
 | `/channel/<N>/xover/hp` | `sf` | `type, freq_hz` | `type` = `OFF` or `<FAMILY><slope>`, one token, e.g. `BUT24`, `BES12`, `LR12`, `BUT6`, `BUT48`. Families: `BUT`/`BES`/`LR` (Butterworth/Bessel/Linkwitz-Riley). Slopes: `6/12/18/24/48` (dB/oct), **no zero-padding** at any width. |
 | `/channel/<N>/xover/lp` | `sf` | `type, freq_hz` | Same encoding as `xover/hp`. |
-| `/channel/<N>/xover/gain` | `f` | `gain_db` | |
+| `/channel/<N>/xover/gain` | `f` | `gain_db` | Per-channel output gain trim in the DSP path, with a real firmware setter (`OSC: set Xgain`). **The only remotely-settable level control** — drive both channels together for a master-like "volume" (contrast `/gain`, which is read-only). |
 | `/channel/<N>/deq/<1-2>/comp` | `fff` | `gain_db, threshold_db, ratio` | |
 | `/channel/<N>/deq/<1-2>/time` | `ff` | `attack_ms, release_ms` | |
 | `/channel/<N>/deq/<1-2>/filt` | `sff` | `type, freq_hz, Q` | `type` ∈ `BP, LP6, LP12, HP6, HP12` or `OFF`. Same "OFF via the 'DEQ N' enable toggle, not this list" pattern as PEQ — same wire-vs-UI-display caveat applies. |
@@ -74,7 +82,8 @@ says otherwise. `<N>` = channel, `1` or `2`.
 | `/preset/load` | `iis` | `slot, 0, name` | This is what "Recall" sends. The int and name here look like non-authoritative placeholders (device already knows what's stored); only `slot` matters. Confirmed the amp applies its full stored state internally (one message on the wire, not ~40 individual SETs). |
 | `/peaklimit` | — | — | Bare GET: no reply, no observable effect. Untested with real arguments. |
 | `/speaker` | — | — | Never observed on the wire for the USB iNuke DSP line. The Configuration tab's "Load" (speaker impedance) dropdown is a **client-side-only** wattage calculation — it sends nothing. May be an AX-series/UDP-only concept, or unused. |
-| `/siggen` | — | — | No UI path exists for the iNuke DSP series (no "Utility" tab) — AX-series only. |
+| `/protect` | — | — | **Firmware address (device-side), added from `FIRMWARE_NOTES.md`.** Present in the firmware but a bare GET gets no reply from the live amp; like `/lock`, most likely **pushed by the device** as an async protection-status report (thermal/DC/clip), not independently queryable. Not a control. |
+| `/siggen` | `if` (at least) | `enable/type, freq_hz, …` | **Correction: handled by the iNuke DSP firmware** (not AX-only). A live bare GET replied `[0, 1000.0]` (looks like `[enabled=0, freq=1000 Hz]`; a level arg likely also exists, given the app's "sine wave level" strings). There is just no *UI* path for it in the iNuke DSP app (no "Utility" tab). A test-tone generator, **not** a program-volume control — don't enable it blind. See [`FIRMWARE_NOTES.md`](FIRMWARE_NOTES.md). |
 
 ### Preset system
 
@@ -98,9 +107,12 @@ DSP state, but only Recall touches the amp's own onboard slots.
    loss, but it will look like total failure if you don't know about it.
    This "everything stops replying" state has also been seen once with no
    `/offline` involved, cause unknown — `/online` fixes it either way.
-4. **`/gain` looks writable at the wire level but isn't** — don't build a
-   gain/mute control on top of it without testing against real hardware
-   first (see the address table entry).
+4. **`/gain` is read-only — confirmed in firmware, not just observed.** The
+   device firmware has a gain *reporter* but no gain *setter*, so a `/gain`
+   SET is accepted on the wire and silently dropped (this is why write tests
+   are ignored). For a remote level/"volume" control use
+   `/channel/<N>/xover/gain`, which has a real setter. See the address-table
+   entry and [`FIRMWARE_NOTES.md`](FIRMWARE_NOTES.md).
 5. Frequency, dB, and other numeric fields are plain float32 — don't try to
    parse the `.arp` file's `4k00`-style shorthand as anything other than a
    save-file text convenience; it's never on the wire.
@@ -476,11 +488,15 @@ heartbeat + continuous meter telemetry). This is presumably what the UI's
 - `/info` -> reply typetags `ssi`, e.g. `["NU3000DSP", "(V1.3)", 5]` — device
   model, firmware version string, and an integer (meaning TBD — possibly a
   protocol/capability version).
-- `/gain` -> reply typetags `ffii`, e.g. `[0.0, 0.0, 0, 0]`. Not yet mapped
-  to a specific UI control, but shape strongly suggests
-  `[gainA_dB, gainB_dB, muteA, muteB]` given the UI strings `mutegainA`/
-  `mutegainB`/`linkgain` found in the binary. Needs an isolated-change
-  capture to confirm.
+- `/gain` -> reply typetags `ffii`, e.g. `[0.0, 0.0, 0, 0]` =
+  `[gainA_dB, gainB_dB, muteA, muteB]` (shape matches the UI strings
+  `mutegainA`/`mutegainB`/`linkgain` in the binary). **Now confirmed
+  read-only**: the isolated-change capture `session4_gaintest.pcap` shows a
+  host write of `-3.0` followed by the device still reporting `0.0`, and the
+  firmware has a gain reporter but no setter (see
+  [`FIRMWARE_NOTES.md`](FIRMWARE_NOTES.md)). The `mutegainA`/`linkgain` UI
+  strings correspond to a gain/mute control the iNuke DSP app never exposes
+  (likely AX-series-only).
 - `/preset/name` for an **unused** slot replies with the string `"EMPTY"`
   (not `"DUMMY"` — that was only the placeholder used in the *request*).
   Confirms the amp has **20 onboard preset slots** (indices 1-20), each
@@ -497,9 +513,11 @@ heartbeat + continuous meter telemetry). This is presumably what the UI's
   message for this hardware.
 - The app has **no "Utility" tab for the iNuke DSP series** (only
   Configuration / Filter-Crossover / Parametric EQ / Dynamic EQ / Setup) —
-  confirmed directly against the running app. The signal generator
-  (`/siggen`, Test Tone / Pink / White noise) has no UI path on this
-  hardware over USB; it's AX-series only.
+  confirmed directly against the running app, so the signal generator has no
+  *UI* path over USB. **Correction (from the firmware image + a live test):
+  `/siggen` itself is NOT AX-series-only** — the iNuke DSP firmware handles
+  it, and a live bare GET replied `/siggen ,if [0, 1000.0]`. It simply isn't
+  wired to any control in this app. See [`FIRMWARE_NOTES.md`](FIRMWARE_NOTES.md).
 
 ## Open questions / next steps
 
