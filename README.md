@@ -7,6 +7,9 @@ maintained. This project documents the protocol it uses to control iNuke DSP
 power amps over USB, and provides an independent, open-source client that
 talks to the amp directly — no vendor app required.
 
+**Try the web app live: [ryanmathewson.github.io/inuke-oscd](https://ryanmathewson.github.io/inuke-oscd/)**
+(desktop Chrome, Edge, or Opera — plug the amp in over USB and click Connect).
+
 ## Status
 
 **Protocol: well understood and documented. Two independent replacement
