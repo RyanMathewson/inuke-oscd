@@ -15,6 +15,7 @@ from typing import Any, Optional
 from . import constants as C
 from .protocol import DeviceNotFoundError, DeviceTimeoutError, INukeClient
 from . import snapshot
+from . import arp
 
 
 def _print_progress(i: int, total: int, key: str) -> None:
@@ -191,6 +192,14 @@ def build_parser() -> argparse.ArgumentParser:
     restore_p.add_argument("file")
     restore_p.add_argument("-y", "--yes", action="store_true", help="don't prompt for confirmation")
 
+    arp_p = sub.add_parser("arp", help="load/save the amp's live state as a vendor-compatible .arp preset file")
+    arp_sub = arp_p.add_subparsers(dest="arp_command", required=True)
+    arp_save_p = arp_sub.add_parser("save", help="save the amp's current live state to a .arp file")
+    arp_save_p.add_argument("file")
+    arp_load_p = arp_sub.add_parser("load", help="push a .arp file onto the amp (overwrites live state)")
+    arp_load_p.add_argument("file")
+    arp_load_p.add_argument("-y", "--yes", action="store_true", help="don't prompt for confirmation")
+
     raw_p = sub.add_parser("raw", help="escape hatch: send an arbitrary OSC address")
     raw_p.add_argument("address")
     raw_p.add_argument("--type", default="", dest="typetags", help="OSC typetags, e.g. sfff (empty = GET)")
@@ -243,6 +252,30 @@ def run(args: argparse.Namespace) -> int:
         with INukeClient() as client:
             snapshot.restore(client, data, on_progress=_print_progress)
         print("Restore complete.")
+        return 0
+
+    if args.command == "arp":
+        if args.arp_command == "save":
+            with INukeClient() as client:
+                data = snapshot.capture(client, on_progress=_print_progress)
+            with open(args.file, "w", encoding="ascii", newline="") as f:
+                f.write(arp.format_arp(data))
+            print(f"Wrote .arp preset to {args.file}")
+            return 0
+
+        # arp_command == "load"
+        with open(args.file, "r", encoding="ascii", errors="replace", newline="") as f:
+            text = f.read()
+        try:
+            data = arp.parse_arp(text)
+        except arp.ArpFormatError as err:
+            raise SystemExit(f"error: {err}")
+        if not _confirm(f"Load {args.file} onto the amp? This overwrites the amp's entire live DSP state.", args.yes):
+            print("Aborted.")
+            return 1
+        with INukeClient() as client:
+            snapshot.restore(client, data, on_progress=_print_progress)
+        print("Load complete.")
         return 0
 
     with INukeClient() as client:

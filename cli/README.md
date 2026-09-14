@@ -74,12 +74,11 @@ inuke raw /ampmode --type s --args STEREO   # escape hatch: arbitrary SET
 Add `--json` before the subcommand to get machine-readable output from any
 read command, for scripting.
 
-### Backup / restore
+### Backup / restore / `.arp` presets
 
 `backup`/`restore` snapshot the full live DSP state (both channels: PEQ,
 crossover, dynamic EQ, delay/phase, limiter, amp mode) to a JSON file and
-back -- a cross-platform, script-friendly alternative to the vendor app's
-`.arp` file format:
+back -- the script-friendly option, easy to diff, edit, or generate:
 
 ```
 inuke backup my-amp.json
@@ -87,9 +86,19 @@ inuke restore my-amp.json      # prompts for confirmation; overwrites live state
 inuke restore my-amp.json -y   # skip the prompt
 ```
 
-This is deliberately not the same thing as the 20 onboard preset slots
-(`inuke preset store/recall`), which live on the amp itself -- `backup`
-captures to a file on your machine instead.
+`arp save`/`arp load` do the same thing, but read and write the vendor
+app's own `.arp` preset file format directly, so files round-trip with the
+legacy iNuke Remote Connect app:
+
+```
+inuke arp save my-amp.arp
+inuke arp load my-amp.arp      # prompts for confirmation; overwrites live state
+inuke arp load my-amp.arp -y   # skip the prompt
+```
+
+Neither of these is the same thing as the 20 onboard preset slots
+(`inuke preset store/recall`), which live on the amp itself -- `backup`/
+`arp save` capture to a file on your machine instead.
 
 ## Testing
 

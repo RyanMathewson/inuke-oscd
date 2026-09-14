@@ -30,14 +30,16 @@ editable parameters.**
   [WebHID](https://developer.mozilla.org/en-US/docs/Web/API/WebHID_API):
   no install, no server, talks to the amp directly from a Chrome/Edge/Opera
   tab. Covers amp mode/name, 8-band PEQ and crossover per channel, dynamic
-  EQ, delay/phase, limiter, live meters, and the 20 onboard presets. See
+  EQ, delay/phase, limiter, live meters, the 20 onboard presets, and
+  save/load of the vendor app's own `.arp` preset file format. See
   [`webapp/README.md`](webapp/README.md) for how to run it and its known
   limitations (WebHID is Chromium-only; Lock/Unlock is deliberately not
   implemented).
 - **[`cli/`](cli/)** — a cross-platform (Windows/macOS/Linux) Python CLI
   and library (`pip install -e cli/`, installs the `inuke` command) for the
-  same parameter set, plus JSON output for scripting and a full-state
-  JSON backup/restore that the vendor app never had. See
+  same parameter set, plus JSON output for scripting, a full-state JSON
+  backup/restore that the vendor app never had, and `arp save`/`arp load`
+  for real interop with the vendor app's own `.arp` preset files. See
   [`cli/README.md`](cli/README.md).
 - [`scripts/inuke_client.py`](scripts/inuke_client.py) is the original
   minimal Python client (via `hidapi`) this was all bootstrapped from —
@@ -46,8 +48,10 @@ editable parameters.**
 - Several supporting scripts exist for analysis and safety, not end-user
   use: [`scripts/parse_osc.py`](scripts/parse_osc.py) /
   [`parse_osc_in.py`](scripts/parse_osc_in.py) decode OSC traffic out of a
-  USBPcap capture, [`scripts/verify_arp.py`](scripts/verify_arp.py) diffs
-  the amp's live state against a saved `.arp` preset file, and
+  USBPcap capture, [`scripts/verify_arp.py`](scripts/verify_arp.py) is a
+  read-only diagnostic that diffs the amp's live state against a saved
+  `.arp` preset file (distinct from `cli/`'s `arp save`/`arp load`, which
+  actually write and load `.arp` files), and
   [`scripts/poll_meter.py`](scripts/poll_meter.py) streams live meter
   telemetry.
 - [`scripts/ui_automation.ps1`](scripts/ui_automation.ps1) is a

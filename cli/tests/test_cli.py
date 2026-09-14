@@ -1,7 +1,13 @@
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from inuke_cli.cli import build_parser, run
+from inuke_cli.protocol import INukeClient
+from inuke_cli import arp
+from .fake_transport import FakeTransport
+from .test_snapshot import _full_reply_map
 
 
 class ValidationTests(unittest.TestCase):
@@ -114,6 +120,50 @@ class CliDispatchTests(unittest.TestCase):
         code = self._run(["preset", "store", "5", "MyPreset", "-y"], client)
         self.assertEqual(code, 0)
         client.save_preset.assert_called_once_with(5, 1, "MyPreset")  # STEREO -> enum 1
+
+    def test_arp_save_writes_a_file_arp_can_re_read(self):
+        client = INukeClient(transport=FakeTransport(_full_reply_map()), min_send_interval_s=0)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = str(Path(tmp) / "out.arp")
+            code = self._run(["arp", "save", path], client)
+            self.assertEqual(code, 0)
+            data = arp.parse_arp(Path(path).read_text(encoding="ascii"))
+        self.assertEqual(data["ampmode"], "STEREO")
+
+    def test_arp_load_prompts_and_aborts_without_yes(self):
+        client = INukeClient(transport=FakeTransport({}), min_send_interval_s=0)
+        text = arp.format_arp({"ampmode": "STEREO", "channels": {"1": _empty(), "2": _empty()}})
+        with tempfile.TemporaryDirectory() as tmp:
+            path = str(Path(tmp) / "in.arp")
+            Path(path).write_text(text, encoding="ascii")
+            with patch("builtins.input", return_value="n"):
+                code = self._run(["arp", "load", path], client)
+        self.assertEqual(code, 1)
+
+    def test_arp_load_with_yes_pushes_every_field(self):
+        transport = FakeTransport(_full_reply_map())
+        capture_client = INukeClient(transport=transport, min_send_interval_s=0)
+        from inuke_cli import snapshot
+        data = snapshot.capture(capture_client)
+        text = arp.format_arp(data)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = str(Path(tmp) / "in.arp")
+            Path(path).write_text(text, encoding="ascii")
+
+            transport2 = FakeTransport({})
+            client2 = INukeClient(transport=transport2, min_send_interval_s=0)
+            code = self._run(["arp", "load", path, "-y"], client2)
+
+        self.assertEqual(code, 0)
+        sent_addrs = {m["addr"] for m in transport2.sent}
+        self.assertIn("/ampmode", sent_addrs)
+        self.assertIn("/channel/1/peq/1", sent_addrs)
+        self.assertIn("/channel/2/limiter", sent_addrs)
+
+
+def _empty():
+    return arp._empty_channel()
 
 
 if __name__ == "__main__":

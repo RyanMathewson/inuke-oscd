@@ -18,7 +18,7 @@ export function createStore(initial) {
   };
 }
 
-function emptyChannel() {
+export function emptyChannel() {
   return {
     peq: Object.fromEntries(PEQ_BANDS.map((b) => [b, { type: 'OFF', freq: 0, gain: 0, q: 0 }])),
     xover: { hp: { type: 'OFF', freq: 0 }, lp: { type: 'OFF', freq: 0 }, gain: 0 },

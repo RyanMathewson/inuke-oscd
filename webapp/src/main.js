@@ -2,6 +2,7 @@ import { INukeProtocol } from './protocol.js';
 import { createStore, initialState } from './state.js';
 import { applyMessageToState } from './sync.js';
 import { mountSetup } from './ui/setup.js';
+import { mountFile } from './ui/file.js';
 import { mountConfiguration } from './ui/configuration.js';
 import { mountCrossover } from './ui/crossover.js';
 import { mountPeq } from './ui/peq.js';
@@ -34,6 +35,7 @@ if (!INukeProtocol.isSupported()) {
 
 // --- mount UI ---
 mountSetup(document.getElementById('panel-setup'), ctx);
+mountFile(document.getElementById('panel-setup'), ctx);
 mountConfiguration(document.getElementById('panel-configuration'), ctx);
 mountCrossover(document.getElementById('panel-crossover'), ctx);
 mountPeq(document.getElementById('panel-peq'), ctx);
