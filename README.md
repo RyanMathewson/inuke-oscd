@@ -41,6 +41,11 @@ editable parameters.**
   backup/restore that the vendor app never had, and `arp save`/`arp load`
   for real interop with the vendor app's own `.arp` preset files. See
   [`cli/README.md`](cli/README.md).
+- **Room EQ with [REW](https://www.roomeqwizard.com/)** — `inuke rew loop`
+  drives Room EQ Wizard's REST API (REW V5.40+): measure the room, let REW
+  fit the amp's 8 PEQ bands to your target, write them to the amp, re-measure
+  to verify, and repeat until you're happy. See
+  [`docs/REW_WORKFLOW.md`](docs/REW_WORKFLOW.md).
 - [`scripts/inuke_client.py`](scripts/inuke_client.py) is the original
   minimal Python client (via `hidapi`) this was all bootstrapped from —
   kept as-is as a research/debugging tool; `cli/` is the polished,

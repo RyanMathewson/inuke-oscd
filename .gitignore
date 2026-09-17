@@ -9,3 +9,6 @@ node_modules/
 iNukeRemoteConnect_V1.4/
 iNukeUsbUpdate_V1.3/
 user_manual.pdf
+
+# REW room-EQ session logs (inuke rew loop)
+rew-eq-ch*.json

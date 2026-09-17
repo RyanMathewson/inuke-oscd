@@ -100,6 +100,29 @@ Neither of these is the same thing as the 20 onboard preset slots
 (`inuke preset store/recall`), which live on the amp itself -- `backup`/
 `arp save` capture to a file on your machine instead.
 
+### Room EQ with REW
+
+`inuke rew ...` connects the amp to [Room EQ Wizard](https://www.roomeqwizard.com/)
+through REW's REST API. REW must be **V5.40 or later** (5.31 release builds
+say "API not supported in this build") and started with the API enabled:
+`roomeqwizard.exe -api`, or Preferences -> API. Full walkthrough and how it
+works: [`../docs/REW_WORKFLOW.md`](../docs/REW_WORKFLOW.md).
+
+```
+inuke rew status                         # REW reachable? Pro licence? list measurements
+inuke rew loop --channel 1               # measure -> fit -> write -> verify, repeat until happy
+inuke rew loop --channel 1 --shape subwoofer --range 20-200 --max-boost 3
+inuke rew loop --channel 1 --simulate    # try it with no mic or amp (REW still needed)
+
+inuke rew fit 3 --range 20-300           # fit EQ to REW measurement #3 and show it
+inuke rew fit 3 --apply --channel 1      # ...and write it to the amp
+inuke rew push 3 --channel 1             # write filters you hand-tuned in REW's EQ window
+inuke rew pull 3 --channel 1             # copy the amp's PEQ into REW to see its predicted effect
+```
+
+Starting sweeps over the API needs REW's Pro upgrade. Without it, the loop
+asks you to click Measure in REW and picks up the new measurement itself.
+
 ## Testing
 
 ```
@@ -110,6 +133,10 @@ No hardware needed -- tests inject a fake HID transport
 (`tests/fake_transport.py`) that speaks the same wire framing a real amp
 would. The OSC codec tests assert byte-for-byte against the actual captured
 packets quoted in PROTOCOL_NOTES.md.
+
+The REW tests use a fake REW too. One end-to-end test runs against a real
+REW (simulated room and amp; it adds measurements to REW) when you ask for it:
+`INUKE_REW_LIVE=1 python -m unittest tests.test_rew.LiveRewTests`.
 
 ## Library use
 

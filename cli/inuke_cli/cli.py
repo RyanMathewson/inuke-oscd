@@ -16,6 +16,8 @@ from . import constants as C
 from .protocol import DeviceNotFoundError, DeviceTimeoutError, INukeClient
 from . import snapshot
 from . import arp
+from . import rew_cli
+from .rew import RewError
 
 
 def _print_progress(i: int, total: int, key: str) -> None:
@@ -206,6 +208,8 @@ def build_parser() -> argparse.ArgumentParser:
     raw_p.add_argument("--args", nargs="*", default=[], help="args matching --type, in order")
     raw_p.add_argument("--timeout", type=float, default=2.0)
 
+    rew_cli.add_parser(sub)
+
     return p
 
 
@@ -234,6 +238,9 @@ def _coerce_raw_args(typetags: str, raw_args: list[str]) -> list:
 
 def run(args: argparse.Namespace) -> int:
     as_json = args.json
+
+    if args.command == "rew":
+        return rew_cli.run(args)
 
     if args.command == "backup":
         with INukeClient() as client:
@@ -460,6 +467,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         print(f"error: {err}", file=sys.stderr)
         print("hint: try `inuke online` first -- see PROTOCOL_NOTES.md, Critical gotcha #3", file=sys.stderr)
         return 3
+    except RewError as err:
+        return rew_cli.main_error(err)
     except KeyboardInterrupt:
         print("\nInterrupted.", file=sys.stderr)
         return 130
