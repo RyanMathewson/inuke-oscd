@@ -44,8 +44,24 @@ editable parameters.**
 - **Room EQ with [REW](https://www.roomeqwizard.com/)** — `inuke rew loop`
   drives Room EQ Wizard's REST API (REW V5.40+): measure the room, let REW
   fit the amp's 8 PEQ bands to your target, write them to the amp, re-measure
-  to verify, and repeat until you're happy. See
-  [`docs/REW_WORKFLOW.md`](docs/REW_WORKFLOW.md).
+  to verify, and repeat until you're happy. `--channel both` writes one fit
+  identically to both channels, which is what two subwoofers fed a single
+  mono signal need. Proven on real hardware: a room measured 6.3 dB RMS from
+  target, 2.3 dB after, with REW's prediction matching the result to 0.4 dB.
+  See [`docs/REW_WORKFLOW.md`](docs/REW_WORKFLOW.md).
+- **AV receiver control over RS-232** — `inuke onkyo` drives an Onkyo
+  receiver's power, volume, input and listening mode. This matters for room
+  EQ rather than convenience: the amp's own `/gain` is read-only, so on a
+  receiver-fed setup the receiver's master volume is the only level in the
+  signal path that can be set remotely. `inuke rew loop` uses it to hold a
+  known measurement level and to refuse to sweep unless the receiver is on
+  the expected input and in a listening mode that isn't quietly reshaping
+  the sound.
+- **Audio diagnostics** — [`scripts/`](scripts/) holds the tools used to
+  debug the measurement chain itself: checking the Windows capture level,
+  scanning the amp's response with its own meters (no microphone needed),
+  and getting REW's native audio library to say why it won't open a device.
+  See [`scripts/README_audio_diag.md`](scripts/README_audio_diag.md).
 - [`scripts/inuke_client.py`](scripts/inuke_client.py) is the original
   minimal Python client (via `hidapi`) this was all bootstrapped from —
   kept as-is as a research/debugging tool; `cli/` is the polished,
