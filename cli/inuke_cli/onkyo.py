@@ -74,10 +74,20 @@ MODES: Dict[str, str] = {
     "86": "PLII Game",
 }
 
-#: The listening mode a measurement should be taken in: no room correction, no
-#: upmix, no bass management beyond what the receiver always applies. "Direct"
-#: is the lever on a TX-SR806 -- the ISCP set here has no Audyssey on/off command.
-MEASUREMENT_MODE = "01"
+#: The listening mode a measurement should be taken in.
+#:
+#: **Not Direct.** Measured on a TX-SR806 on 2026-11-08 with music playing and the
+#: amp's own meters watched over USB: in Direct the iNuke's inputs read exactly
+#: 0.0000, while Stereo and All Ch Stereo both showed signal. Direct cuts the
+#: subwoofer pre-out for a 2-channel source on this receiver, so measuring in
+#: Direct would measure silence. The intuitive choice is the wrong one here.
+#:
+#: Stereo is the next-least-processed mode that keeps bass management, so the sub
+#: is fed with no upmix. All Ch Stereo also works but drives every speaker, and
+#: their redirected bass all lands on the sub (it metered noticeably hotter).
+#: Note the ISCP set has no Audyssey on/off command, so if Audyssey is enabled it
+#: is still in circuit in Stereo -- turn it off at the receiver for accurate runs.
+MEASUREMENT_MODE = "00"
 
 
 class OnkyoError(Exception):
@@ -329,9 +339,13 @@ class Onkyo:
                 f"input is {source_name(state['source'])}, expected {source_name(expect_source)}"
             )
         if expect_mode is not None and state["mode"] != expect_mode:
+            detail = (
+                "this receiver cuts the subwoofer pre-out in Direct, so the sweep would be inaudible"
+                if state["mode"] == "01"
+                else "room correction or an upmix would be measured instead of the room"
+            )
             problems.append(
-                f"listening mode is {mode_name(state['mode'])}, expected {mode_name(expect_mode)} "
-                f"(room correction or an upmix would be measured instead of the room)"
+                f"listening mode is {mode_name(state['mode'])}, expected {mode_name(expect_mode)} ({detail})"
             )
         if expect_volume_raw is not None and state["volume_raw"] != expect_volume_raw:
             problems.append(

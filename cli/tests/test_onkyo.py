@@ -202,26 +202,33 @@ class CodeLookupTests(unittest.TestCase):
 class GuardTests(unittest.TestCase):
     """The point of the guard: never measure through room correction or an upmix."""
 
-    def test_passes_in_direct(self):
-        amp = connect(state={"LMD": "01"})
-        amp.check(expect_source="10", expect_mode="01")
-
-    def test_rejects_stereo_when_direct_expected(self):
+    def test_passes_in_the_measurement_mode(self):
         amp = connect(state={"LMD": "00"})
+        amp.check(expect_source="10", expect_mode="00")
+
+    def test_rejects_direct_because_it_cuts_the_sub(self):
+        # Measured on a TX-SR806: in Direct the amp's own input meters read
+        # 0.0000 while music played, so a sweep there would be silence.
+        amp = connect(state={"LMD": "01"})
         with self.assertRaises(Preconditions) as caught:
-            amp.check(expect_mode="01")
-        self.assertIn("Stereo", str(caught.exception))
-        self.assertIn("Direct", str(caught.exception))
+            amp.check(expect_mode="00")
+        message = str(caught.exception)
+        self.assertIn("Direct", message)
+        self.assertIn("subwoofer pre-out", message)
+
+    def test_default_measurement_mode_is_not_direct(self):
+        self.assertNotEqual(onkyo.MEASUREMENT_MODE, "01")
+        self.assertEqual(mode_name(onkyo.MEASUREMENT_MODE), "Stereo")
 
     def test_rejects_wrong_input(self):
-        amp = connect(state={"LMD": "01", "SLI": "23"})
+        amp = connect(state={"LMD": "00", "SLI": "23"})
         with self.assertRaises(Preconditions) as caught:
             amp.check(expect_source="10")
         self.assertIn("CD", str(caught.exception))
 
     def test_rejects_mute_and_standby(self):
         with self.assertRaises(Preconditions) as caught:
-            connect(state={"LMD": "01", "AMT": "01"}).check()
+            connect(state={"LMD": "00", "AMT": "01"}).check()
         self.assertIn("muted", str(caught.exception))
         with self.assertRaises(Preconditions) as caught:
             connect(state={"PWR": "00"}).check(expect_mode=None)
@@ -230,7 +237,7 @@ class GuardTests(unittest.TestCase):
     def test_reports_every_problem_at_once(self):
         amp = connect(state={"LMD": "0C", "SLI": "23", "AMT": "01"})
         with self.assertRaises(Preconditions) as caught:
-            amp.check(expect_source="10", expect_mode="01")
+            amp.check(expect_source="10", expect_mode="00")
         self.assertEqual(len(caught.exception.problems), 3)
 
     def test_mode_check_can_be_skipped(self):
@@ -238,7 +245,7 @@ class GuardTests(unittest.TestCase):
 
     def test_volume_can_be_required(self):
         with self.assertRaises(Preconditions):
-            connect(state={"LMD": "01"}).check(expect_mode="01", expect_volume_raw=50)
+            connect(state={"LMD": "00"}).check(expect_mode="00", expect_volume_raw=50)
 
 
 class LevelHoldTests(unittest.TestCase):
@@ -289,30 +296,30 @@ class ReceiverGuardedTests(unittest.TestCase):
         return ReceiverGuarded(inner, amp, **kwargs), inner, amp
 
     def test_sweeps_when_preconditions_hold(self):
-        guard, inner, _ = self.guarded(state={"LMD": "01"}, expect_mode="01", expect_source="10")
+        guard, inner, _ = self.guarded(state={"LMD": "00"}, expect_mode="00", expect_source="10")
         self.assertEqual(guard.measure(None, "t"), "uuid-1")
         self.assertEqual(inner.calls, 1)
 
     def test_does_not_sweep_in_the_wrong_mode(self):
-        guard, inner, _ = self.guarded(state={"LMD": "0C"}, expect_mode="01")
+        guard, inner, _ = self.guarded(state={"LMD": "0C"}, expect_mode="00")
         with self.assertRaises(Preconditions):
             guard.measure(None, "t")
         self.assertEqual(inner.calls, 0, "a bad measurement must never be taken")
 
     def test_does_not_sweep_when_muted(self):
-        guard, inner, _ = self.guarded(state={"LMD": "01", "AMT": "01"}, expect_mode="01")
+        guard, inner, _ = self.guarded(state={"LMD": "00", "AMT": "01"}, expect_mode="00")
         with self.assertRaises(Preconditions):
             guard.measure(None, "t")
         self.assertEqual(inner.calls, 0)
 
     def test_holds_the_level_during_the_sweep_then_restores(self):
-        guard, inner, amp = self.guarded(state={"LMD": "01"}, expect_mode="01", level_raw=50)
+        guard, inner, amp = self.guarded(state={"LMD": "00"}, expect_mode="00", level_raw=50)
         guard.measure(None, "t")
         self.assertEqual(inner.level_during_sweep, 50, "sweep must run at the measurement level")
         self.assertEqual(amp.volume_raw(), 42, "listening level must be restored")
 
     def test_level_is_restored_even_if_the_sweep_fails(self):
-        guard, inner, amp = self.guarded(state={"LMD": "01"}, expect_mode="01", level_raw=50)
+        guard, inner, amp = self.guarded(state={"LMD": "00"}, expect_mode="00", level_raw=50)
 
         def boom(rew, title):
             raise RuntimeError("sweep failed")
@@ -323,13 +330,13 @@ class ReceiverGuardedTests(unittest.TestCase):
         self.assertEqual(amp.volume_raw(), 42)
 
     def test_without_a_level_the_volume_is_left_alone(self):
-        guard, inner, amp = self.guarded(state={"LMD": "01"}, expect_mode="01")
+        guard, inner, amp = self.guarded(state={"LMD": "00"}, expect_mode="00")
         guard.measure(None, "t")
         self.assertEqual(inner.level_during_sweep, 42)
         self.assertEqual(amp.volume_raw(), 42)
 
     def test_level_above_the_cap_is_refused_before_sweeping(self):
-        guard, inner, amp = self.guarded(state={"LMD": "01"}, expect_mode="01", level_raw=90)
+        guard, inner, amp = self.guarded(state={"LMD": "00"}, expect_mode="00", level_raw=90)
         with self.assertRaises(OnkyoError):
             guard.measure(None, "t")
         self.assertEqual(inner.calls, 0)
