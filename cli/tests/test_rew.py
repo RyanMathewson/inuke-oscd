@@ -369,6 +369,102 @@ class SessionTests(unittest.TestCase):
         self.assertNotIn("apply", [e["kind"] for e in s.log.events])
 
 
+class MirroredChannelTests(unittest.TestCase):
+    """Two identical subwoofers fed one mono signal: the mic hears their sum, so
+    there is nothing to attribute to one channel. One fit goes to both."""
+
+    def _session(self, mags_seq, mirrors=(2,)):
+        rew = FakeRew()
+        amp = room_eq.SimulatedAmp()
+        s = room_eq.RoomEqSession(
+            rew, amp, 1, FakeMeasurer(mags_seq), room_eq.FitSettings(),
+            out=lambda *_: None, mirror_channels=list(mirrors),
+        )
+        return rew, amp, s
+
+    def test_apply_writes_the_same_bands_to_both(self):
+        _, amp, s = self._session([[80.0] * 4])
+        s.measure("a")
+        fit = s.fit()
+        s.apply(fit.mapped.bands)
+        self.assertEqual(room_eq.read_bands(amp, 1), fit.mapped.bands)
+        self.assertEqual(room_eq.read_bands(amp, 2), fit.mapped.bands)
+        self.assertEqual(room_eq.read_bands(amp, 1), room_eq.read_bands(amp, 2))
+
+    def test_restore_puts_each_channel_back_to_its_own_original(self):
+        # Start the two channels mismatched, as the real amp was found.
+        rew = FakeRew()
+        amp = room_eq.SimulatedAmp()
+        amp.set_peq(2, 1, "PEQ", 78.0, 13.0, 5.0)
+        s = room_eq.RoomEqSession(
+            rew, amp, 1, FakeMeasurer([[80.0] * 4]), room_eq.FitSettings(),
+            out=lambda *_: None, mirror_channels=[2],
+        )
+        before1 = room_eq.read_bands(amp, 1)
+        before2 = room_eq.read_bands(amp, 2)
+        self.assertNotEqual(before1, before2)
+        s.measure("a")
+        s.apply(s.fit().mapped.bands)
+        self.assertEqual(room_eq.read_bands(amp, 1), room_eq.read_bands(amp, 2))
+        s.restore_original()
+        self.assertEqual(room_eq.read_bands(amp, 1), before1)
+        self.assertEqual(room_eq.read_bands(amp, 2), before2, "each channel must go back to its own EQ")
+
+    def test_log_records_both_channels(self):
+        _, _, s = self._session([[80.0] * 4])
+        self.assertEqual(s.log.mirror_channels, [2])
+        self.assertIn("2", s.log.original_mirror_bands)
+        s.measure("a")
+        s.apply(s.fit().mapped.bands)
+        apply_event = [e for e in s.log.events if e["kind"] == "apply"][0]
+        self.assertEqual(apply_event["channels"], [1, 2])
+
+    def test_the_fit_itself_is_unchanged_by_mirroring(self):
+        _, _, single = self._session([[80.0] * 4], mirrors=())
+        single.measure("a")
+        a = single.fit().mapped.bands
+        _, _, both = self._session([[80.0] * 4], mirrors=(2,))
+        both.measure("a")
+        self.assertEqual(both.fit().mapped.bands, a, "mirroring must not alter the fit")
+
+    def test_mirroring_the_fitted_channel_is_a_no_op(self):
+        _, _, s = self._session([[80.0] * 4], mirrors=(1,))
+        self.assertEqual(s.mirror_channels, [])
+        self.assertEqual(s.all_channels, [1])
+
+    def test_loop_undo_restores_both(self):
+        rew = FakeRew()
+        amp = room_eq.SimulatedAmp()
+        amp.set_peq(2, 1, "PEQ", 78.0, 13.0, 5.0)
+        s = room_eq.RoomEqSession(
+            rew, amp, 1, FakeMeasurer([[80.0] * 4, [80.0] * 4]), room_eq.FitSettings(),
+            out=lambda *_: None, mirror_channels=[2],
+        )
+        before2 = room_eq.read_bands(amp, 2)
+        answers = iter(["", "y", "", "u"])
+        self.assertEqual(room_eq.run_loop(s, ask=lambda _: next(answers)), 0)
+        self.assertEqual(room_eq.read_bands(amp, 2), before2)
+
+
+class ChannelSpecTests(unittest.TestCase):
+    def test_parsing(self):
+        from inuke_cli.rew_cli import _channel_spec
+
+        self.assertEqual(_channel_spec("1"), (1, []))
+        self.assertEqual(_channel_spec("2"), (2, []))
+        self.assertEqual(_channel_spec("both"), (1, [2]))
+        self.assertEqual(_channel_spec(" BOTH "), (1, [2]))
+
+    def test_rejects_nonsense(self):
+        import argparse as _argparse
+
+        from inuke_cli.rew_cli import _channel_spec
+
+        for bad in ("3", "0", "left", ""):
+            with self.assertRaises(_argparse.ArgumentTypeError):
+                _channel_spec(bad)
+
+
 class ManualMeasurerTests(unittest.TestCase):
     def test_waits_for_a_new_measurement(self):
         class Rew:

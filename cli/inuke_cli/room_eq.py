@@ -419,6 +419,10 @@ class SessionLog:
     original_bands: list[dict]
     started: str = field(default_factory=lambda: time.strftime("%Y-%m-%d %H:%M:%S"))
     events: list[dict] = field(default_factory=list)
+    #: Channels the fit is mirrored onto, and what they held beforehand, so the
+    #: log is a complete record of everything this session could have changed.
+    mirror_channels: list[int] = field(default_factory=list)
+    original_mirror_bands: dict = field(default_factory=dict)
 
 
 def fit_to_target(rew: RewClient, basis: str, settings: FitSettings, target_level_db: Optional[float] = None) -> FitResult:
@@ -468,10 +472,19 @@ class RoomEqSession:
         settings: FitSettings,
         out: Callable[[str], None] = print,
         log_path: Optional[str] = None,
+        mirror_channels: Optional[list] = None,
     ):
         self.rew = rew
         self.amp = amp
         self.channel = channel
+        #: Extra channels that receive the *same* fitted bands as `channel`.
+        #:
+        #: For two identical subwoofers fed one mono signal, the microphone hears
+        #: their sum, so there is nothing to attribute to an individual channel:
+        #: the right move is to fit the sum once and drive both the same. The fit
+        #: is still measured and computed against `channel`; the mirrors only
+        #: receive the result.
+        self.mirror_channels = [c for c in (mirror_channels or []) if c != channel]
         self.measurer = measurer
         self.settings = settings
         self.out = out
@@ -480,8 +493,19 @@ class RoomEqSession:
         self.target_level_db: Optional[float] = None
         self.pass_no = 0
         self.original_bands = read_bands(amp, channel)
-        self.log = SessionLog(channel, rew.version(), self.original_bands)
+        self.original_mirror_bands = {c: read_bands(amp, c) for c in self.mirror_channels}
+        self.log = SessionLog(
+            channel,
+            rew.version(),
+            self.original_bands,
+            mirror_channels=list(self.mirror_channels),
+            original_mirror_bands={str(c): b for c, b in self.original_mirror_bands.items()},
+        )
         self._save_log()
+
+    @property
+    def all_channels(self) -> list:
+        return [self.channel] + self.mirror_channels
 
     # --- log ---
     def _event(self, kind: str, **data) -> None:
@@ -538,12 +562,15 @@ class RoomEqSession:
         return result
 
     def apply(self, bands: list[dict]) -> None:
-        write_bands(self.amp, self.channel, bands)
-        self._event("apply", bands=bands)
+        for ch in self.all_channels:
+            write_bands(self.amp, ch, bands)
+        self._event("apply", bands=bands, channels=self.all_channels)
 
     def restore_original(self) -> None:
         write_bands(self.amp, self.channel, self.original_bands)
-        self._event("restore", bands=self.original_bands)
+        for ch in self.mirror_channels:
+            write_bands(self.amp, ch, self.original_mirror_bands[ch])
+        self._event("restore", bands=self.original_bands, channels=self.all_channels)
 
     def verify(self, measurement_uuid: str, fit: FitResult) -> VerifyResult:
         rew = self.rew
@@ -596,10 +623,23 @@ LOOP_MENU = """
 def run_loop(session: RoomEqSession, ask: Callable[[str], str] = input, assume_yes: bool = False) -> int:
     out = session.out
     ch = session.channel
-    out(f"Channel {ch}: original PEQ (restorable with [u]):")
+    if session.mirror_channels:
+        others = ", ".join(str(c) for c in session.mirror_channels)
+        out(f"Channels {ch} and {others}: one fit, written identically to all of them.")
+        out(f"Channel {ch}: original PEQ (restorable with [u]):")
+    else:
+        out(f"Channel {ch}: original PEQ (restorable with [u]):")
     out(format_bands(session.original_bands))
-    if dynamic_eq_active(session.amp, ch):
-        out("  warning: dynamic EQ is active on this channel; its level-dependent gain will skew measurements.")
+    for other in session.mirror_channels:
+        if session.original_mirror_bands[other] != session.original_bands:
+            # Worth saying out loud: the measurement that is about to be taken was
+            # made by channels that were not matched, so the baseline is their sum
+            # under two different EQ curves.
+            out(f"  note: channel {other} started with different PEQ; it will be overwritten to match.")
+            out(format_bands(session.original_mirror_bands[other]))
+    for c in session.all_channels:
+        if dynamic_eq_active(session.amp, c):
+            out(f"  warning: dynamic EQ is active on channel {c}; its level-dependent gain will skew measurements.")
 
     out("\n== Measurement 1 (with the current EQ) ==")
     _wait(ask, assume_yes, "Press Enter to measure")
@@ -626,7 +666,8 @@ def run_loop(session: RoomEqSession, ask: Callable[[str], str] = input, assume_y
         else:
             session.apply(fit.mapped.bands)
             session.pass_no += 1
-            out(f"  Written to channel {ch}.")
+            written = ", ".join(str(c) for c in session.all_channels)
+            out(f"  Written to channel{'s' if session.mirror_channels else ''} {written}.")
             out(f"\n== Measurement {len(session.estimates) + 1} (verifying) ==")
             _wait(ask, assume_yes, "Press Enter to measure")
             uuid = session.measure(f"pass {session.pass_no}")

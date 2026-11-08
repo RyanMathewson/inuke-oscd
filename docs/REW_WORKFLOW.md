@@ -93,6 +93,37 @@ Notes on the protocol, from a TX-SR806:
 - The port is opened exclusively, so this cannot share an adapter with Home
   Assistant's Onkyo Serial integration at the same time.
 
+## Two subwoofers, one per channel
+
+If both channels drive identical subwoofers from the same mono feed, use:
+
+```
+inuke rew loop --channel both ...
+```
+
+One measurement, one fit, written **identically** to both channels.
+
+This is not a convenience. With two subs fed the same signal and one microphone,
+the mic hears their **sum** -- there is nothing in that measurement to attribute
+to an individual channel, so "fit channel 1" does not describe anything real
+unless you physically silence the other sub. Fitting the sum once and driving
+both channels the same is the correct operation for that setup.
+
+Note that no amp mode does this for you. In BIAMP1 the amp distributes one mono
+input to both channels -- the amp's own meters show `in A` and `in B` identical
+-- but each channel's PEQ stays independent, and BIAMP1's actual purpose is the
+opposite (a sub plus a satellite, filtered differently). Symmetry has to be set.
+
+The loop still measures and fits against channel 1; the other channel only
+receives the result. `[u]ndo` restores **each** channel to its own original EQ,
+not a shared one, and the session log records both channels' starting bands. If
+the channels start out mismatched the loop says so before measuring, because the
+baseline measurement was then made by two differently-equalised subs.
+
+`inuke scan`-style electrical checks are worth running first here: see
+`scripts/amp_freq_scan.py`, which uses the amp's own meters to confirm both
+channels behave identically, with no microphone involved.
+
 ## The loop
 
 ```

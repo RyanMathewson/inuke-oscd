@@ -75,6 +75,20 @@ def _settings_from_args(args: argparse.Namespace) -> FitSettings:
     )
 
 
+def _channel_spec(text: str):
+    """Parse --channel into (channel to fit, channels to mirror the fit onto)."""
+    t = text.strip().lower()
+    if t in ("both", "all"):
+        return (C.CHANNELS[0], list(C.CHANNELS[1:]))
+    try:
+        n = int(t)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"expected {' or '.join(map(str, C.CHANNELS))} or 'both', got {text!r}")
+    if n not in C.CHANNELS:
+        raise argparse.ArgumentTypeError(f"channel must be one of {list(C.CHANNELS)} or 'both', got {n}")
+    return (n, [])
+
+
 def _add_onkyo_options(p: argparse.ArgumentParser) -> None:
     """Drive the AV receiver that feeds the amp, if there is one on RS-232.
 
@@ -135,7 +149,14 @@ def add_parser(sub) -> None:
     rew_sub.add_parser("status", help="check REW's API and list its measurements")
 
     loop_p = rew_sub.add_parser("loop", help="interactive measure -> fit -> apply -> verify loop for one channel")
-    loop_p.add_argument("--channel", type=int, choices=C.CHANNELS, required=True)
+    loop_p.add_argument(
+        "--channel",
+        type=_channel_spec,
+        required=True,
+        metavar="N|both",
+        help="channel to fit (1 or 2), or 'both' for one fit written identically to both -- "
+        "which is what two identical subwoofers fed one mono signal need, since the mic hears their sum",
+    )
     loop_p.add_argument(
         "--measure",
         choices=["auto", "api", "manual"],
@@ -220,10 +241,12 @@ def _status(rew: RewClient, as_json: bool) -> int:
 
 def _loop(rew: RewClient, args: argparse.Namespace) -> int:
     settings = _settings_from_args(args)
-    log_path = args.log or f"rew-eq-ch{args.channel}-{time.strftime('%Y%m%d-%H%M%S')}.json"
+    channel, mirrors = args.channel
+    tag = "both" if mirrors else str(channel)
+    log_path = args.log or f"rew-eq-ch{tag}-{time.strftime('%Y%m%d-%H%M%S')}.json"
     if args.simulate:
         amp = room_eq.SimulatedAmp()
-        measurer = room_eq.SimulatedRoom(amp, args.channel)
+        measurer = room_eq.SimulatedRoom(amp, channel)
         print("Simulating the amp and the room; results go into REW as imported measurements.")
     else:
         amp = _open_amp()
@@ -235,7 +258,9 @@ def _loop(rew: RewClient, args: argparse.Namespace) -> int:
     receiver = None
     try:
         measurer, receiver = _guarded(measurer, args)
-        session = room_eq.RoomEqSession(rew, amp, args.channel, measurer, settings, log_path=log_path)
+        session = room_eq.RoomEqSession(
+            rew, amp, channel, measurer, settings, log_path=log_path, mirror_channels=mirrors
+        )
         print(f"REW {session.log.rew_version}; session log: {log_path}")
         return room_eq.run_loop(session, assume_yes=args.yes)
     finally:
