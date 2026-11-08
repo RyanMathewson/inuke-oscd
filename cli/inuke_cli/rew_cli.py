@@ -11,6 +11,8 @@ from . import constants as C
 from .protocol import INukeClient
 from .rew import AMP_BANDS, DEFAULT_URL, EQUALISER, RewClient, RewError, amp_bands_to_rew, rew_filters_to_amp
 from . import room_eq
+from . import onkyo
+from . import onkyo_cli
 from .room_eq import FitSettings
 
 
@@ -73,6 +75,58 @@ def _settings_from_args(args: argparse.Namespace) -> FitSettings:
     )
 
 
+def _add_onkyo_options(p: argparse.ArgumentParser) -> None:
+    """Drive the AV receiver that feeds the amp, if there is one on RS-232.
+
+    The amp's own gain is read-only, so the receiver's master volume is the only
+    level in the path that can be set remotely -- which is what makes a
+    repeatable measurement level possible.
+    """
+    g = p.add_argument_group("AV receiver (RS-232)")
+    g.add_argument(
+        "--onkyo-port",
+        metavar="PORT",
+        default=None,
+        help=f"serial port of an Onkyo receiver, e.g. COM3 (default: ${onkyo_cli.ENV_PORT}). "
+        f"Without this the receiver is not touched and you set the level by hand.",
+    )
+    g.add_argument(
+        "--onkyo-level",
+        metavar="LEVEL",
+        default=None,
+        help="measurement level, as dB (e.g. -35) or raw:NN; set before each sweep and restored after",
+    )
+    g.add_argument("--onkyo-input", metavar="NAME", default=None, help="require this input, e.g. DVD")
+    g.add_argument(
+        "--onkyo-mode",
+        metavar="NAME",
+        default=onkyo.mode_name(onkyo.MEASUREMENT_MODE),
+        help="require this listening mode (default %(default)s; 'any' to skip the check)",
+    )
+    g.add_argument(
+        "--onkyo-max-raw",
+        type=int,
+        default=onkyo.DEFAULT_MAX_RAW,
+        help="refuse to command a level above this raw value (default %(default)s)",
+    )
+
+
+def _guarded(measurer, args):
+    """Wrap `measurer` so the receiver is checked and the level held, if asked."""
+    port = getattr(args, "onkyo_port", None) or onkyo_cli.default_port()
+    if not port:
+        return measurer, None
+    receiver = onkyo.Onkyo(port, max_raw=args.onkyo_max_raw).open()
+    mode = None if str(args.onkyo_mode).lower() == "any" else onkyo.code_for(args.onkyo_mode, onkyo.MODES)
+    source = onkyo.code_for(args.onkyo_input, onkyo.SOURCES) if args.onkyo_input else None
+    level = None
+    if args.onkyo_level:
+        text = str(args.onkyo_level).strip()
+        level = int(text[4:], 10) if text.lower().startswith("raw:") else receiver.db_to_raw(float(text))
+    print(f"Receiver on {port}: preconditions enforced before every sweep.")
+    return room_eq.ReceiverGuarded(measurer, receiver, level, source, mode), receiver
+
+
 def add_parser(sub) -> None:
     rew_p = sub.add_parser("rew", help="Room EQ Wizard integration: measure, fit EQ, apply to the amp")
     rew_p.add_argument("--url", default=DEFAULT_URL, help="REW API address (default %(default)s)")
@@ -91,6 +145,7 @@ def add_parser(sub) -> None:
     loop_p.add_argument("--log", metavar="FILE", help="session log (default: rew-eq-ch<N>-<time>.json)")
     loop_p.add_argument("--simulate", action="store_true", help="use a simulated amp and room (REW is still real)")
     loop_p.add_argument("-y", "--yes", action="store_true", help="no prompts: one measure/fit/apply/verify pass, then stop")
+    _add_onkyo_options(loop_p)
     _add_fit_options(loop_p)
 
     fit_p = rew_sub.add_parser("fit", help="fit EQ to an existing REW measurement (taken as the uncorrected room)")
@@ -177,11 +232,15 @@ def _loop(rew: RewClient, args: argparse.Namespace) -> int:
             "api": room_eq.ApiMeasurer,
             "manual": room_eq.ManualMeasurer,
         }[args.measure]()
+    receiver = None
     try:
+        measurer, receiver = _guarded(measurer, args)
         session = room_eq.RoomEqSession(rew, amp, args.channel, measurer, settings, log_path=log_path)
         print(f"REW {session.log.rew_version}; session log: {log_path}")
         return room_eq.run_loop(session, assume_yes=args.yes)
     finally:
+        if receiver is not None:
+            receiver.close()
         if not args.simulate:
             amp.close()
 

@@ -30,6 +30,52 @@ upgrade. `inuke rew status` tells you which you have.
   Start. It watches REW's measurement list and continues as soon as the new
   measurement appears. Pick a mode explicitly with `--measure api|manual`.
 
+## The AV receiver (RS-232)
+
+If the amp is fed from an Onkyo receiver with an RS-232 port, `inuke onkyo` can
+drive it, and `inuke rew loop` can use it. This matters more than it sounds:
+the amp's own `/gain` is read-only on real hardware, and the only level it will
+accept is `/channel/N/xover/gain`, which is part of what the loop is fitting.
+**The receiver's master volume is the only level in the whole signal path that
+can be set remotely.**
+
+```
+inuke onkyo --port COM3 status
+inuke onkyo --port COM3 mode Direct
+inuke onkyo --port COM3 check --expect-input DVD
+```
+
+Set `INUKE_ONKYO_PORT` to avoid passing `--port` every time. `check` exits
+non-zero and says what is wrong, so it also works as a pre-flight in a script.
+
+In the loop:
+
+```
+inuke rew loop --channel 1 --onkyo-port COM3 --onkyo-input DVD --onkyo-level -35
+```
+
+Before every sweep the loop then refuses to measure unless the receiver is on,
+unmuted, on `--onkyo-input` and in `--onkyo-mode` (default **Direct**). This is
+the check worth having: measuring through Audyssey or All Channel Stereo does
+not fail, it just quietly returns the wrong room, and the loop will then fit the
+amp's PEQ to it. Pass `--onkyo-mode any` to skip the check.
+
+With `--onkyo-level` the loop sets that level for each sweep and puts the
+listening level back afterwards, including when it is interrupted, so every
+measurement in a run is taken at the same known level. Levels are dB (`-35`) or
+`raw:NN`. A cap (`--onkyo-max-raw`, default 70 = -12 dB) stops a typo becoming a
+loud sweep; `--force` on `inuke onkyo volume` overrides it.
+
+Notes on the protocol, from a TX-SR806:
+
+- `MVL` carries the volume as **hex, one unit per dB**: raw 82 (`0x52`) is 0 dB,
+  so raw 42 (`0x2A`) is -40.0 dB. `--zero-db-raw` sets that reference for
+  another model.
+- There is **no Audyssey on/off command** in this command set. Direct mode is
+  the lever for bypassing room correction.
+- The port is opened exclusively, so this cannot share an adapter with Home
+  Assistant's Onkyo Serial integration at the same time.
+
 ## The loop
 
 ```

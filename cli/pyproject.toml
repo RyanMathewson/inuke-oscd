@@ -5,7 +5,7 @@ description = "Cross-platform CLI for Behringer iNuke DSP power amps (USB/HID/OS
 readme = "README.md"
 requires-python = ">=3.8"
 license = { text = "MIT" }
-dependencies = ["hidapi>=0.14"]
+dependencies = ["hidapi>=0.14", "pyserial>=3.5"]
 
 [project.scripts]
 inuke = "inuke_cli.cli:main"

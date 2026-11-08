@@ -17,7 +17,9 @@ from .protocol import DeviceNotFoundError, DeviceTimeoutError, INukeClient
 from . import snapshot
 from . import arp
 from . import rew_cli
+from . import onkyo_cli
 from .rew import RewError
+from .onkyo import OnkyoError
 
 
 def _print_progress(i: int, total: int, key: str) -> None:
@@ -209,6 +211,7 @@ def build_parser() -> argparse.ArgumentParser:
     raw_p.add_argument("--timeout", type=float, default=2.0)
 
     rew_cli.add_parser(sub)
+    onkyo_cli.add_parser(sub)
 
     return p
 
@@ -241,6 +244,9 @@ def run(args: argparse.Namespace) -> int:
 
     if args.command == "rew":
         return rew_cli.run(args)
+
+    if args.command == "onkyo":
+        return onkyo_cli.run(args)
 
     if args.command == "backup":
         with INukeClient() as client:
@@ -469,6 +475,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         return 3
     except RewError as err:
         return rew_cli.main_error(err)
+    except OnkyoError as err:
+        return onkyo_cli.main_error(err)
     except KeyboardInterrupt:
         print("\nInterrupted.", file=sys.stderr)
         return 130

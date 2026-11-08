@@ -301,6 +301,56 @@ class AutoMeasurer:
         return self._impl.measure(rew, title)
 
 
+class ReceiverGuarded:
+    """Wraps any measurer with the AV receiver's level control and preconditions.
+
+    Two separate jobs, both of which the loop could not do before, because the
+    iNuke's own gain is read-only and the receiver was driven by hand:
+
+    * **Preconditions.** Refuse to sweep unless the receiver is on, unmuted, on
+      the expected input and in a listening mode that applies no room correction
+      and no upmix. Getting this wrong does not fail loudly -- it quietly yields
+      a measurement of Audyssey's output, or of five speakers, and the loop then
+      fits the amp's PEQ to it.
+    * **A known level.** Set the master volume before the sweep and restore the
+      listening level afterwards, so every measurement in a run is taken at the
+      same level and the "measured vs predicted" comparison is not polluted by a
+      level change between passes.
+    """
+
+    def __init__(
+        self,
+        inner,
+        onkyo,
+        level_raw: Optional[int] = None,
+        expect_source: Optional[str] = None,
+        expect_mode: Optional[str] = None,
+        out: Callable[[str], None] = print,
+    ):
+        self.inner = inner
+        self.onkyo = onkyo
+        self.level_raw = level_raw
+        self.expect_source = expect_source
+        self.expect_mode = expect_mode
+        self.out = out
+
+    def measure(self, rew: RewClient, title: str) -> str:
+        from .onkyo import LevelHold
+
+        state = self.onkyo.check(self.expect_source, self.expect_mode)
+        from .onkyo import mode_name, source_name
+
+        self.out(
+            f"  Receiver: {source_name(state['source'])}, {mode_name(state['mode'])}, "
+            f"{state['volume_db']:+.0f} dB"
+        )
+        if self.level_raw is None:
+            return self.inner.measure(rew, title)
+        with LevelHold(self.onkyo, self.level_raw):
+            self.out(f"  Measurement level: {self.onkyo.raw_to_db(self.level_raw):+.0f} dB")
+            return self.inner.measure(rew, title)
+
+
 def _try_rename(rew: RewClient, uuid: str, title: str) -> None:
     try:
         rew.rename(uuid, title)
