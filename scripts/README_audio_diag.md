@@ -44,3 +44,17 @@ as roughly `amp input dBFS = receiver dB - 19`.
 
 Both Python scripts assume the receiver is on COM3 and import `inuke_cli`
 directly; they are diagnostics, not part of the CLI.
+
+## `mic_level.ps1`
+
+Prints the Windows capture level (0-100%) of every active input endpoint, via the
+Core Audio `IAudioEndpointVolume` API.
+
+Worth running **before every measurement**. On this system the Focusrite's capture
+level silently reverted from 100% to 25% at least twice during one session --
+roughly 12 dB of digital attenuation applied *after* the converter, so it costs
+signal-to-noise as well as level, and nothing warns you. It is not readable from
+the registry; the endpoint volume lives in the audio engine, hence the COM interop.
+
+    powershell -ExecutionPolicy Bypass -File scripts/mic_level.ps1
+
