@@ -1,4 +1,7 @@
+import http.server
+import json
 import os
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -434,6 +437,39 @@ class RewCliTests(unittest.TestCase):
 
 
 @unittest.skipUnless(os.environ.get("INUKE_REW_LIVE"), "set INUKE_REW_LIVE=1 with REW running (-api) to run")
+class AcceptHeaderTests(unittest.TestCase):
+    """REW's API is served by Spark, which routes on the Accept header: a request
+    without "application/json" gets a 404 even for a path that exists. --simulate
+    never exercises the transport, so only a real server catches a missing header."""
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802 - BaseHTTPRequestHandler's name
+            if "application/json" not in (self.headers.get("Accept") or ""):
+                self.send_response(404)
+                self.end_headers()
+                self.wfile.write(b"<html><body><h2>404 Not found</h2></body></html>")
+                return
+            body = json.dumps({"message": "5.40 Beta 135 API 0.9.8"}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_args):
+            pass
+
+    def setUp(self):
+        self.server = http.server.HTTPServer(("127.0.0.1", 0), self.Handler)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.addCleanup(self.server.server_close)
+        self.addCleanup(self.server.shutdown)
+
+    def test_version_sends_accept_json(self):
+        rew = RewClient(f"http://127.0.0.1:{self.server.server_address[1]}", timeout_s=10)
+        self.assertEqual(rew.version(), "5.40 Beta 135 API 0.9.8")
+
+
 class LiveRewTests(unittest.TestCase):
     """End-to-end against a real REW, with a simulated room and amp.
     Adds measurements to REW."""

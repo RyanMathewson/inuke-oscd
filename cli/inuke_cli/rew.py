@@ -240,7 +240,12 @@ class RewClient:
     def request(self, method: str, path: str, body: Any = None, timeout_s: Optional[float] = None) -> Any:
         data = None if body is None else json.dumps(body).encode("utf-8")
         req = urllib.request.Request(
-            self.base_url + path, data=data, method=method, headers={"Content-Type": "application/json"}
+            self.base_url + path,
+            data=data,
+            method=method,
+            # REW's API is served by Spark, which routes on the Accept header: without
+            # "application/json" every request comes back 404 Not found.
+            headers={"Content-Type": "application/json", "Accept": "application/json"},
         )
         try:
             with urllib.request.urlopen(req, timeout=timeout_s or self.timeout_s) as resp:
