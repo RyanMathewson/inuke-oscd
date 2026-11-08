@@ -55,28 +55,34 @@ inuke rew loop --channel 1 --onkyo-port COM3 --onkyo-input DVD --onkyo-level -35
 ```
 
 Before every sweep the loop then refuses to measure unless the receiver is on,
-unmuted, on `--onkyo-input` and in `--onkyo-mode` (default **Stereo**). This is
+unmuted, on `--onkyo-input` and in `--onkyo-mode` (default **Direct**). This is
 the check worth having: measuring in the wrong mode does not fail, it just
 quietly returns the wrong room, and the loop will then fit the amp's PEQ to it.
 Pass `--onkyo-mode any` to skip the check.
 
-**Do not use Direct on a TX-SR806.** It is the intuitive choice and it is wrong:
-Direct cuts the subwoofer pre-out for a 2-channel source, so a sweep measures
-silence. This was settled by playing music and watching the amp's own input
-meters over USB (`inuke meter`) while switching modes:
+It earns its keep. On a TX-SR806 the receiver **switches mode by itself** when
+the incoming stream changes between stereo and multichannel -- it selected
+Theater-Dimensional, a virtual surround mode, the moment the HDMI stream became
+7.1. Nothing announces that; the guard caught it.
 
-| Listening mode | iNuke input meter |
-|---|---|
-| Direct | `0.0000` -- no signal at all |
-| Stereo | signal present |
-| All Ch Stereo | signal present, noticeably hotter (every speaker's bass is redirected to the sub) |
+### Which mode -- it depends on the source
 
-Stereo is therefore the default: the least-processed mode that still feeds the
-sub. `inuke meter` is a good sanity check in general -- it confirms signal is
-reaching the amp before you spend a sweep finding out it wasn't.
+Measured on a TX-SR806 by playing a tone and watching the amp's own input meters
+over USB (`inuke meter`):
 
-Note the ISCP command set has **no Audyssey on/off command**, so if Audyssey is
-enabled it is still in circuit in Stereo. Turn it off at the receiver for
+| Source | Direct | Stereo / All Ch Stereo |
+|---|---|---|
+| 2-channel | **sub pre-out dead** (`0.0000` at the amp) | signal present |
+| multichannel with a real LFE channel | **correct** (0.00005 -> 0.00583) | downmixes |
+
+So **Direct is the default**, because the recommended workflow sends the sweep on
+a discrete LFE channel (see below) and Direct then passes it to the sub while
+applying no room correction, no upmix and no virtual surround. But for a plain
+2-channel measurement Direct is exactly wrong -- with no LFE channel there is
+nothing for it to route and the subs go silent. Use `--onkyo-mode Stereo` there.
+
+The ISCP command set has **no Audyssey on/off command**. Direct bypasses room
+correction; if you measure in Stereo, turn Audyssey off at the receiver for
 accurate runs.
 
 With `--onkyo-level` the loop sets that level for each sweep and puts the
@@ -92,6 +98,30 @@ Notes on the protocol, from a TX-SR806:
   another model.
 - The port is opened exclusively, so this cannot share an adapter with Home
   Assistant's Onkyo Serial integration at the same time.
+
+## Measuring the subs only, via the LFE channel
+
+If the receiver drives mains and a centre as well as the subs, a sweep sent to
+L/R measures **all of them**, and fitting the sub amp's PEQ to that response is
+wrong -- it uses the subwoofer to correct peaks the mains are making.
+
+Send the sweep on a discrete **LFE** channel instead:
+
+1. Windows: Sound -> Playback -> the receiver -> **Configure** -> **7.1 Surround**,
+   with **Subwoofer** ticked. Leave the speakers marked full-range so Windows does
+   no bass management of its own -- you want exactly one place doing that, and it
+   should be the receiver.
+2. **Restart REW.** It caches device capabilities at startup and will keep
+   reporting 2 channels until it is restarted.
+3. In REW pick the **`EXCL:` version** of the receiver output. The plain entry is
+   stock Java Sound, which is limited to 16-bit **and stereo**, so it can never
+   offer LFE. The `EXCL:` entry exposes all 8 channels.
+4. Set the output channel to **LFE**, and the receiver to **Direct**.
+
+Check it worked by playing a tone well above the subwoofer crossover -- say
+500 Hz -- on the LFE channel. If routing is right it is **inaudible**: it reaches
+only the sub, whose low-pass removes it. If you hear it from the mains, the
+receiver is redistributing LFE and its speaker setup needs looking at.
 
 ## Two subwoofers, one per channel
 

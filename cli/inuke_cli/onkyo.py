@@ -76,18 +76,26 @@ MODES: Dict[str, str] = {
 
 #: The listening mode a measurement should be taken in.
 #:
-#: **Not Direct.** Measured on a TX-SR806 on 2026-11-08 with music playing and the
-#: amp's own meters watched over USB: in Direct the iNuke's inputs read exactly
-#: 0.0000, while Stereo and All Ch Stereo both showed signal. Direct cuts the
-#: subwoofer pre-out for a 2-channel source on this receiver, so measuring in
-#: Direct would measure silence. The intuitive choice is the wrong one here.
+#: **It depends on the source, and both cases were measured on a TX-SR806.**
 #:
-#: Stereo is the next-least-processed mode that keeps bass management, so the sub
-#: is fed with no upmix. All Ch Stereo also works but drives every speaker, and
-#: their redirected bass all lands on the sub (it metered noticeably hotter).
-#: Note the ISCP set has no Audyssey on/off command, so if Audyssey is enabled it
-#: is still in circuit in Stereo -- turn it off at the receiver for accurate runs.
-MEASUREMENT_MODE = "00"
+#: * **Multichannel source with a real LFE channel (the proven workflow): Direct.**
+#:   Direct passes LFE straight to the subwoofer pre-out and applies no room
+#:   correction, no upmix and no virtual surround, so it is the least-processed
+#:   option and the right default. Verified 2026-11-08: with a 7.1 stream carrying
+#:   a 50 Hz tone on LFE only, the amp's input meter went from 0.00005 to 0.00583.
+#: * **Two-channel source: Direct is wrong -- it cuts the subwoofer pre-out
+#:   entirely.** With no LFE channel there is nothing for Direct to route, and the
+#:   amp's inputs read exactly 0.0000 while Stereo and All Ch Stereo both showed
+#:   signal. Use ``--onkyo-mode Stereo`` for a 2-channel measurement.
+#:
+#: Beware that the receiver switches mode *by itself* when the incoming stream
+#: changes between stereo and multichannel -- it selected Theater-Dimensional
+#: unprompted when the HDMI stream became 7.1, which is exactly the kind of silent
+#: invalidation :meth:`Onkyo.check` exists to catch.
+#:
+#: Note the ISCP set has no Audyssey on/off command. Direct bypasses room
+#: correction; in Stereo, Audyssey must be turned off at the receiver.
+MEASUREMENT_MODE = "01"
 
 
 class OnkyoError(Exception):
@@ -339,11 +347,13 @@ class Onkyo:
                 f"input is {source_name(state['source'])}, expected {source_name(expect_source)}"
             )
         if expect_mode is not None and state["mode"] != expect_mode:
-            detail = (
-                "this receiver cuts the subwoofer pre-out in Direct, so the sweep would be inaudible"
-                if state["mode"] == "01"
-                else "room correction or an upmix would be measured instead of the room"
-            )
+            if state["mode"] == "01":
+                detail = (
+                    "Direct cuts the subwoofer pre-out for a 2-channel source, so the sweep would be "
+                    "inaudible; it is correct only when the source carries a real LFE channel"
+                )
+            else:
+                detail = "room correction or an upmix would be measured instead of the room"
             problems.append(
                 f"listening mode is {mode_name(state['mode'])}, expected {mode_name(expect_mode)} ({detail})"
             )

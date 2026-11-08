@@ -203,32 +203,40 @@ class GuardTests(unittest.TestCase):
     """The point of the guard: never measure through room correction or an upmix."""
 
     def test_passes_in_the_measurement_mode(self):
-        amp = connect(state={"LMD": "00"})
-        amp.check(expect_source="10", expect_mode="00")
+        amp = connect(state={"LMD": onkyo.MEASUREMENT_MODE})
+        amp.check(expect_source="10")
 
-    def test_rejects_direct_because_it_cuts_the_sub(self):
-        # Measured on a TX-SR806: in Direct the amp's own input meters read
-        # 0.0000 while music played, so a sweep there would be silence.
+    def test_default_is_direct_for_the_multichannel_lfe_workflow(self):
+        # Direct passes a real LFE channel to the sub and processes nothing,
+        # which is the workflow proven on hardware 2026-11-08.
+        self.assertEqual(mode_name(onkyo.MEASUREMENT_MODE), "Direct")
+
+    def test_direct_is_rejected_when_a_2_channel_run_expects_stereo(self):
+        # The other half of the finding: with no LFE channel, Direct cuts the
+        # subwoofer pre-out and the amp's inputs read 0.0000.
         amp = connect(state={"LMD": "01"})
         with self.assertRaises(Preconditions) as caught:
             amp.check(expect_mode="00")
         message = str(caught.exception)
         self.assertIn("Direct", message)
         self.assertIn("subwoofer pre-out", message)
+        self.assertIn("2-channel", message)
 
-    def test_default_measurement_mode_is_not_direct(self):
-        self.assertNotEqual(onkyo.MEASUREMENT_MODE, "01")
-        self.assertEqual(mode_name(onkyo.MEASUREMENT_MODE), "Stereo")
+    def test_rejects_an_upmix_for_a_different_reason(self):
+        amp = connect(state={"LMD": "0C"})
+        with self.assertRaises(Preconditions) as caught:
+            amp.check(expect_mode="01")
+        self.assertIn("upmix", str(caught.exception))
 
     def test_rejects_wrong_input(self):
-        amp = connect(state={"LMD": "00", "SLI": "23"})
+        amp = connect(state={"LMD": onkyo.MEASUREMENT_MODE, "SLI": "23"})
         with self.assertRaises(Preconditions) as caught:
             amp.check(expect_source="10")
         self.assertIn("CD", str(caught.exception))
 
     def test_rejects_mute_and_standby(self):
         with self.assertRaises(Preconditions) as caught:
-            connect(state={"LMD": "00", "AMT": "01"}).check()
+            connect(state={"LMD": onkyo.MEASUREMENT_MODE, "AMT": "01"}).check()
         self.assertIn("muted", str(caught.exception))
         with self.assertRaises(Preconditions) as caught:
             connect(state={"PWR": "00"}).check(expect_mode=None)
