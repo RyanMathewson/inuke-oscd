@@ -1,0 +1,42 @@
+
+BEGIN_OSC_DATA
+/ampmode s BIAMP1
+/channel/1/peq/1 sfff OFF 40 0 0.15
+/channel/1/peq/2 sfff PEQ 33.9 -10 4.41
+/channel/1/peq/3 sfff PEQ 44.9997 5 7.22
+/channel/1/peq/4 sfff PEQ 78 13 5
+/channel/1/peq/5 sfff OFF 66.0998 -3 10
+/channel/1/peq/6 sfff OFF 43.5001 -5.5 10
+/channel/1/peq/7 sfff OFF 4k00 0 0.15
+/channel/1/peq/8 sfff OFF 10k00 0 0.15
+/channel/1/xover/hp sf OFF 29.9999
+/channel/1/xover/lp sf BUT24 65
+/channel/1/xover/gain f 0
+/channel/1/deq/1/comp fff 15 -50 5
+/channel/1/deq/1/time ff 50 1000
+/channel/1/deq/1/filt sff OFF 40 1
+/channel/1/deq/2/comp fff 0 -30 5
+/channel/1/deq/2/time ff 50 1000
+/channel/1/deq/2/filt sff BP 2k00 1
+/channel/1/delay fi 0 0
+/channel/1/limiter fff 69.9 100 50
+/channel/2/peq/1 sfff OFF 40 0 0.15
+/channel/2/peq/2 sfff OFF 100 0 0.15
+/channel/2/peq/3 sfff OFF 200 0 0.15
+/channel/2/peq/4 sfff PEQ 34.5999 -7.5 4.8
+/channel/2/peq/5 sfff PEQ 61.2999 -6.5 10
+/channel/2/peq/6 sfff PEQ 43.5001 -5.5 10
+/channel/2/peq/7 sfff OFF 4k00 0 0.15
+/channel/2/peq/8 sfff OFF 10k00 0 0.15
+/channel/2/xover/hp sf OFF 760.3964
+/channel/2/xover/lp sf BUT24 65.0002
+/channel/2/xover/gain f 0
+/channel/2/deq/1/comp fff 15 -50 5
+/channel/2/deq/1/time ff 50.5 1000
+/channel/2/deq/1/filt sff OFF 40 1
+/channel/2/deq/2/comp fff 0 -30 5
+/channel/2/deq/2/time ff 50 1000
+/channel/2/deq/2/filt sff BP 2k00 1
+/channel/2/delay fi 0 0
+/channel/2/limiter fff 69.9 100 50
+END_OSC_DATA
