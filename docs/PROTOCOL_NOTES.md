@@ -614,6 +614,17 @@ still open, roughly in priority order:
    threshold change (`verify_arp.py` confirmed full restoration). Revisit
    when normal-volume-but-still-audible testing is convenient; the
    low-threshold trick should still work fine.
+   **Data point 2026-11-23:** loud, bass-heavy music playback peaked at about
+   0.13 in / 0.07 out (~-18 / -23 dBFS if 1.0 = full scale), with the readings
+   decaying smoothly between beats (looks peak-ish, ~100ms envelope). The amp's
+   front-panel LEDs showed only the bottom LED flickering. Each channel has
+   4 LEDs: 3 amber (a signal-level ladder) and a red LIMIT on top. The Quick
+   Start Guide only says "SIGNAL and LIMIT LEDs display the signal level for
+   each channel. Reduce the input gain if the red LIMIT LED lights up
+   continuously" -- no dB values for any step. Thresholds of the 3 amber
+   steps are unmeasured; LIMIT tracks the limiter, not digital full scale.
+   Both clients now display dBFS on that assumption; the web meter's old
+   linear x1000 bar showed "clip" from 0.1 upward, which was a false alarm.
 6. ~~Xover slopes 6/18/48 dB/oct on the wire~~ — **confirmed for 6 and 48.**
    Selected each Slope dropdown option in turn (Channel A Low Pass) and
    captured: `6 dB` -> `/channel/1/xover/lp ,sf "BUT6" 65.0` (single digit,
