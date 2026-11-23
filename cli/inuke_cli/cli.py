@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from typing import Any, Optional
 
@@ -422,7 +423,12 @@ def run(args: argparse.Namespace) -> int:
                             if as_json:
                                 print(json.dumps({"inputA": a[0], "inputB": a[1], "outputA": a[2], "outputB": a[3]}))
                             else:
-                                print(f"in A={a[0]:.4f} B={a[1]:.4f}   out A={a[2]:.4f} B={a[3]:.4f}")
+                                # dBFS assumes 1.0 = full scale (PROTOCOL_NOTES Open Question #5).
+                                db = [f"{20 * math.log10(x):6.1f}" if x > 0 else "  -inf" for x in a]
+                                print(
+                                    f"in A={a[0]:.4f} B={a[1]:.4f}   out A={a[2]:.4f} B={a[3]:.4f}"
+                                    f"   | dBFS in {db[0]} {db[1]}  out {db[2]} {db[3]}"
+                                )
             except KeyboardInterrupt:
                 pass
 
